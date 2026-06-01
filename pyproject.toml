@@ -1,0 +1,99 @@
+[project]
+name = "python-package-template"
+dynamic = ["version"]  # Version is read from __init__.py by hatch
+description = "A simple package using pydantic"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "AlexAndrewsAI", email = "alex.andrews.ai@protonmail.com"}
+]
+keywords = ["hello", "world"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",  # Added
+]
+
+dependencies = [
+    "pydantic>=2.0",
+    "typer>=0.12.0",
+]
+
+[dependency-groups]  # uv-specific feature for grouping optional dependencies
+dev = [
+    "pytest>=7.0",
+    "ruff",
+    "mypy",
+    "pytest-cov>=7.1.0",
+]
+
+[project.scripts]
+hello-world = "python_package_template.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/AlexAndrewsAI/python-package-template"
+Repository = "https://github.com/AlexAndrewsAI/python-package-template.git"
+Documentation = "https://github.com/AlexAndrewsAI/python-package-template#readme"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]  # Configures hatch to read version from __init__.py
+path = "python_package_template/__init__.py"
+
+[tool.uv]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (undefined names, unused imports)
+    "W",   # pycodestyle warnings
+    "D",   # pydocstyle (docstring conventions)
+    "S",   # flake8-bandit (security checks)
+    "B",   # flake8-bugbear (common bugs)
+    "I",   # isort (import sorting)
+    "G",   # flake8-logging-format (logging format)
+    "C4",  # flake8-comprehensions (comprehension optimizations)
+    "PT",  # flake8-pytest-style (pytest conventions)
+    "UP",  # pyupgrade (modernize Python syntax)
+    "ARG", # flake8-unused-arguments (unused function arguments)
+    "RUF", # ruff-specific rules
+    "SIM", # flake8-simplify (code simplification)
+]
+ignore = ["D203", "D213"]  # Ignore conflicting docstring style rules (one-blank-line-before-class vs multi-line-summary)
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # Allow assert statements in tests
+
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true  # Warn when returning Any from a function
+warn_unused_configs = true  # Warn about unused mypy configuration
+disallow_untyped_defs = true  # Require type hints on all function definitions
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=python_package_template --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+source = ["python_package_template"]
+omit = []
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
