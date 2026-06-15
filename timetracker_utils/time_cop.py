@@ -30,26 +30,26 @@ class TimeEntry(BaseModel):
 
     """
 
-    date: str = Field(..., alias="Date", description="The date of the entry")
-    project: str = Field(
-        ..., alias="Project", min_length=1, description="The project name"
-    )
+    date: str = Field(default="", alias="Date", description="The date of the entry")
+    project: str = Field(default="", alias="Project", description="The project name")
     description: str = Field(
         default="", alias="Description", description="Short description of the task"
     )
     combined: str = Field(
-        ...,
+        default="",
         alias="Combined Project & Description",
         description="Combined project & description string",
     )
-    start_time: datetime = Field(
-        ..., alias="Start Time", description="Start timestamp in ISO 8601 format"
+    start_time: datetime | None = Field(
+        default=None,
+        alias="Start Time",
+        description="Start timestamp in ISO 8601 format",
     )
-    end_time: datetime = Field(
-        ..., alias="End Time", description="End timestamp in ISO 8601 format"
+    end_time: datetime | None = Field(
+        default=None, alias="End Time", description="End timestamp in ISO 8601 format"
     )
     hours: float = Field(
-        ..., alias="Time (hours)", description="Number of hours for the entry"
+        default=0.0, alias="Time (hours)", description="Number of hours for the entry"
     )
     notes: str = Field(default="", alias="Notes", description="Optional notes")
 
@@ -57,19 +57,21 @@ class TimeEntry(BaseModel):
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
-    def parse_datetime(cls, value: str) -> datetime:
+    def parse_datetime(cls, value: str | None) -> datetime | None:
         """Parse an ISO 8601 datetime string.
 
         Args:
             value: The datetime string to parse.
 
         Returns:
-            A timezone-aware datetime object.
+            A timezone-aware datetime object, or None if value is None.
 
         Raises:
             ValueError: If the value cannot be parsed as a valid ISO 8601 datetime.
 
         """
+        if value is None:
+            return None
         if isinstance(value, datetime):
             return value
         try:
@@ -81,9 +83,27 @@ class TimeEntry(BaseModel):
             msg = f"Invalid datetime value: {value!r}"
             raise ValueError(msg) from exc
 
-    @field_validator("hours")
+    @field_validator(
+        "date", "project", "description", "combined", "notes", mode="before"
+    )
     @classmethod
-    def validate_hours(cls, value: float) -> float:
+    def coerce_none_to_empty_string(cls, value: str | None) -> str:
+        """Coerce None to empty string for optional string fields.
+
+        Args:
+            value: The string value to coerce.
+
+        Returns:
+            The original string, or empty string if value is None.
+
+        """
+        if value is None:
+            return ""
+        return value
+
+    @field_validator("hours", mode="before")
+    @classmethod
+    def validate_hours(cls, value: str | float | None) -> float:
         """Validate hours value is non-negative and within reasonable range.
 
         Args:
@@ -96,6 +116,10 @@ class TimeEntry(BaseModel):
             ValueError: If the hours value is negative or unreasonably large.
 
         """
+        if value is None:
+            return 0.0
+        if isinstance(value, str):
+            value = float(value)
         if value < 0:
             msg = f"Hours cannot be negative: {value}"
             raise ValueError(msg)
@@ -104,23 +128,28 @@ class TimeEntry(BaseModel):
             raise ValueError(msg)
         return round(value, 4)
 
-    def duration_seconds(self) -> float:
+    def duration_seconds(self) -> float | None:
         """Calculate the duration between start and end time in seconds.
 
         Returns:
-            The duration in seconds.
+            The duration in seconds, or None if start or end time is not set.
 
         """
+        if self.start_time is None or self.end_time is None:
+            return None
         return (self.end_time - self.start_time).total_seconds()
 
-    def duration_minutes(self) -> float:
+    def duration_minutes(self) -> float | None:
         """Calculate the duration between start and end time in minutes.
 
         Returns:
-            The duration in minutes.
+            The duration in minutes, or None if start or end time is not set.
 
         """
-        return self.duration_seconds() / 60.0
+        seconds = self.duration_seconds()
+        if seconds is None:
+            return None
+        return seconds / 60.0
 
 
 class TimeCop:

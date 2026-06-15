@@ -5,6 +5,7 @@
 # Pydantic validators handle str->datetime conversion at runtime
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -145,21 +146,19 @@ def test_time_entry_hours_too_large() -> None:
         )
 
 
-def test_time_entry_empty_project() -> None:
-    """Test that empty project name raises validation error."""
-    with pytest.raises(
-        ValidationError, match="String should have at least 1 character"
-    ):
-        TimeEntry(
-            date="4/13/2026",
-            project="",
-            description="drive",
-            combined="Commute: drive",
-            start_time="2026-04-13T10:45:00.000Z",
-            end_time="2026-04-13T11:45:39.074Z",
-            hours=1.0,
-            notes="",
-        )
+def test_time_entry_empty_project_defaults_to_empty_string() -> None:
+    """Test that empty project name defaults to empty string."""
+    entry = TimeEntry(
+        date="4/13/2026",
+        project="",
+        description="drive",
+        combined="Commute: drive",
+        start_time="2026-04-13T10:45:00.000Z",
+        end_time="2026-04-13T11:45:39.074Z",
+        hours=1.0,
+        notes="",
+    )
+    assert entry.project == ""
 
 
 def test_time_entry_with_datetime_object() -> None:
@@ -346,11 +345,35 @@ def test_timecop_extra_columns_logged_as_warning(
     assert any("Location" in record.message for record in caplog.records)
 
 
-def test_timecop_invalid_csv_raises_error() -> None:
-    """Test that invalid CSV data raises an error."""
+def test_timecop_csv_with_fewer_data_columns_defaults_to_none() -> None:
+    """Test that CSV data row with fewer columns than headers uses defaults."""
     cop = TimeCop()
-    invalid_csv = "col1,col2\nval1\n"
-    # Row with fewer fields than headers will result in dict with None values
-    # Pydantic will reject None for required fields
-    with pytest.raises(ValidationError):
-        cop.read_csv_string(invalid_csv)
+    csv_data = (
+        "Date,Project,Description,Combined Project & Description,"
+        "Start Time,End Time,Time (hours),Notes\n"
+        '"4/13/2026","Commute","drive","Commute: drive","2026-04-13T10:45:00.000Z"\n'
+    )
+    entries = cop.read_csv_string(csv_data)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.date == "4/13/2026"
+    assert entry.project == "Commute"
+    assert entry.start_time == datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
+    assert entry.end_time is None  # Missing column defaults to None
+    assert entry.hours == 0.0  # Missing column defaults to 0.0
+    assert entry.notes == ""  # Missing column defaults to ""
+
+
+def test_time_entry_uses_defaults_when_created_with_no_args() -> None:
+    """Test that TimeEntry can be created with all defaults."""
+    entry = TimeEntry()
+    assert entry.date == ""
+    assert entry.project == ""
+    assert entry.description == ""
+    assert entry.combined == ""
+    assert entry.start_time is None
+    assert entry.end_time is None
+    assert entry.hours == 0.0
+    assert entry.notes == ""
+    assert entry.duration_seconds() is None
+    assert entry.duration_minutes() is None
