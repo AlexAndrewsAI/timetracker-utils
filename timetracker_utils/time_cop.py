@@ -53,7 +53,7 @@ class TimeEntry(BaseModel):
     )
     notes: str = Field(default="", alias="Notes", description="Optional notes")
 
-    model_config = {"populate_by_name": True}
+    model_config = {"populate_by_name": True, "extra": "ignore"}
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
@@ -177,6 +177,22 @@ class TimeCop:
         # Strip BOM if present (UTF-8 BOM: \ufeff)
         cleaned = csv_data.lstrip("\ufeff")
         reader = csv.DictReader(io.StringIO(cleaned))
+
+        # Warn about extra columns that will be ignored
+        if reader.fieldnames is not None:
+            known_fields: set[str] = set()
+            for field_name in TimeEntry.model_fields:
+                field_info = TimeEntry.model_fields[field_name]
+                known_fields.add(field_name)
+                if field_info.alias:
+                    known_fields.add(field_info.alias)
+            extra_cols = set(reader.fieldnames) - known_fields
+            if extra_cols:
+                logger.warning(
+                    "Extra columns in CSV that will be ignored: %s",
+                    sorted(extra_cols),
+                )
+
         self.entries = [TimeEntry(**row) for row in reader]  # type: ignore[arg-type]
         logger.info("Loaded %d time entries", len(self.entries))
         return self.entries

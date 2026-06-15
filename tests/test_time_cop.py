@@ -328,6 +328,24 @@ def test_timecop_read_csv_with_bom() -> None:
     assert len(entries) >= 1
 
 
+def test_timecop_extra_columns_logged_as_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that extra columns in CSV are logged as a warning and ignored."""
+    caplog.set_level(logging.WARNING)
+    cop = TimeCop()
+    csv_with_extra = (
+        "Date,Project,Description,Combined Project & Description,"
+        "Start Time,End Time,Time (hours),Notes,Location\n"
+        '"4/13/2026","Commute","drive","Commute: drive",'
+        '"2026-04-13T10:45:00.000Z","2026-04-13T11:45:39.074Z",1.0,"","Home"\n'
+    )
+    entries = cop.read_csv_string(csv_with_extra)
+    assert len(entries) == 1
+    assert any("Extra columns" in record.message for record in caplog.records)
+    assert any("Location" in record.message for record in caplog.records)
+
+
 def test_timecop_invalid_csv_raises_error() -> None:
     """Test that invalid CSV data raises an error."""
     cop = TimeCop()
