@@ -1,5 +1,5 @@
 [project]
-name = "python-package-template"
+name = "timetracker-utils"
 dynamic = ["version"]  # Version is read from __init__.py by hatch
 description = "A simple package using pydantic"
 readme = "README.md"
@@ -34,7 +34,7 @@ dev = [
 ]
 
 [project.scripts]
-hello-world = "python_package_template.cli:app"
+hello-world = "timetracker_utils.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/AlexAndrewsAI/python-package-template"
@@ -46,7 +46,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]  # Configures hatch to read version from __init__.py
-path = "python_package_template/__init__.py"
+path = "timetracker_utils/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["timetracker_utils"]
 
 [tool.uv]
 
@@ -81,13 +84,19 @@ python_version = "3.10"
 warn_return_any = true  # Warn when returning Any from a function
 warn_unused_configs = true  # Warn about unused mypy configuration
 disallow_untyped_defs = true  # Require type hints on all function definitions
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = false
+init_typed = true
+warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=python_package_template --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=timetracker_utils --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
-source = ["python_package_template"]
+source = ["timetracker_utils"]
 omit = []
 parallel = true
 
