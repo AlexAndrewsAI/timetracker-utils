@@ -5,7 +5,7 @@ Provides a simple greeting class that uses configuration.
 
 import logging
 
-from python_package_template.config import Config
+from timetracker_utils.config import Config
 
 logger = logging.getLogger(__name__)
 
