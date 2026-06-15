@@ -1,14 +1,14 @@
 [project]
 name = "timetracker-utils"
 dynamic = ["version"]  # Version is read from __init__.py by hatch
-description = "A simple package using pydantic"
+description = "Time tracker utilities with CSV parsing and validation via Pydantic"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
     {name = "AlexAndrewsAI", email = "alex.andrews.ai@protonmail.com"}
 ]
-keywords = ["hello", "world"]
+keywords = ["time", "tracking", "csv", "pydantic"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -34,12 +34,12 @@ dev = [
 ]
 
 [project.scripts]
-hello-world = "timetracker_utils.cli:app"
+timetracker = "timetracker_utils.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/AlexAndrewsAI/python-package-template"
-Repository = "https://github.com/AlexAndrewsAI/python-package-template.git"
-Documentation = "https://github.com/AlexAndrewsAI/python-package-template#readme"
+Homepage = "https://github.com/AlexAndrewsAI/timetracker-utils"
+Repository = "https://github.com/AlexAndrewsAI/timetracker-utils.git"
+Documentation = "https://github.com/AlexAndrewsAI/timetracker-utils#readme"
 
 [build-system]
 requires = ["hatchling"]

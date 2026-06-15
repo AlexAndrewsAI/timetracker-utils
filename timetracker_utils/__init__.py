@@ -1,11 +1,9 @@
-"""Python package template.
+"""Time tracker utilities.
 
-A simple template for creating Python packages with configuration management
-and a hello world example.
+Provides CSV time tracking data parsing and validation via TimeCop.
 """
 
-from timetracker_utils.config import Config
-from timetracker_utils.hello import HelloWorld
+from timetracker_utils.time_cop import TimeCop, TimeEntry
 
 __version__ = "0.1.1"
-__all__ = ["Config", "HelloWorld"]
+__all__ = ["TimeCop", "TimeEntry"]

@@ -1,7 +1,8 @@
 """Tests for the TimeCop module."""
 
 # ruff: noqa: E501 - CSV data lines exceed line length limit
-# mypy: ignore-errors - Pydantic validators handle str->datetime conversion at runtime
+# mypy: ignore-errors
+# Pydantic validators handle str->datetime conversion at runtime
 
 import logging
 from pathlib import Path
@@ -159,6 +160,41 @@ def test_time_entry_empty_project() -> None:
             hours=1.0,
             notes="",
         )
+
+
+def test_time_entry_with_datetime_object() -> None:
+    """Test that TimeEntry accepts an already-parsed datetime object."""
+    from datetime import datetime, timezone
+
+    dt = datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
+    entry = TimeEntry(
+        date="4/13/2026",
+        project="Commute",
+        description="drive",
+        combined="Commute: drive",
+        start_time=dt,
+        end_time=dt,
+        hours=1.0,
+        notes="",
+    )
+    assert entry.start_time == dt
+    assert entry.end_time == dt
+
+
+def test_time_entry_datetime_without_tz_converted_to_utc() -> None:
+    """Test that naive datetime is converted to UTC."""
+    entry = TimeEntry(
+        date="4/13/2026",
+        project="Commute",
+        description="drive",
+        combined="Commute: drive",
+        start_time="2026-04-13T10:45:00",
+        end_time="2026-04-13T11:45:39",
+        hours=1.0,
+        notes="",
+    )
+    assert entry.start_time.tzinfo is not None
+    assert entry.end_time.tzinfo is not None
 
 
 def test_time_entry_invalid_datetime() -> None:

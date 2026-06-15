@@ -1,27 +1,27 @@
 """Command line interface module.
 
-Provides a typer-based CLI for the package.
+Provides a typer-based CLI for the package. Currently a dummy entrypoint
+that references the TimeCop class.
 """
 
 import typer
 
 from timetracker_utils import __version__
-from timetracker_utils.config import Config
-from timetracker_utils.hello import HelloWorld
+from timetracker_utils.time_cop import TimeCop
 
-app = typer.Typer(help="Python package template CLI")
+app = typer.Typer(help="Time tracker utilities CLI")
 
 
 def version_callback(value: bool) -> None:
     """Handle the version flag callback."""
     if value:
-        typer.echo(f"python-package-template version: {__version__}")
+        typer.echo(f"timetracker-utils version: {__version__}")
         raise typer.Exit()
 
 
 @app.callback()
 def main(
-    version: bool | None = typer.Option(
+    _version: bool | None = typer.Option(
         None,
         "--version",
         "-V",
@@ -30,26 +30,9 @@ def main(
         help="Show the version and exit.",
     ),
 ) -> None:
-    """Python package template CLI."""
-    ...
-
-
-@app.command()
-def hello(
-    name: str = typer.Option(
-        "World", "--name", "-n", help="Name to greet (default: World)"
-    ),
-) -> None:
-    """Greet the specified name.
-
-    Args:
-        name: The name to greet.
-
-    """
-    config = Config(name=name)
-    hello_world = HelloWorld(config)
-    greeting = hello_world.greet()
-    typer.echo(greeting)
+    """Time tracker utilities CLI."""
+    # Reference TimeCop to ensure the class is importable
+    _ = TimeCop
 
 
 if __name__ == "__main__":
