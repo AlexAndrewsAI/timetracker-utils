@@ -1,5 +1,9 @@
 """Tests for the CLI module."""
 
+# ruff: noqa: E501 - CSV data lines exceed line length limit
+
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -7,6 +11,11 @@ from timetracker_utils import __version__
 from timetracker_utils.cli import app
 
 runner = CliRunner()
+
+SAMPLE_CSV = """\
+"Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
+"1/15/2200","StellarCartography","nebula mapping","StellarCartography: nebula mapping","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","2.5",""
+"""
 
 
 def test_cli_version() -> None:
@@ -67,3 +76,29 @@ def test_version_callback() -> None:
     # Should do nothing when value is False
     result = version_callback(False)
     assert result is None
+
+
+def test_timecop_command(tmp_path: Path) -> None:
+    """Test the timecop CLI command loads a CSV and prints the DataFrame."""
+    csv_path = tmp_path / "test.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    result = runner.invoke(app, ["timecop", "--input", str(csv_path)])
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+    assert "StellarCartography" in result.output
+
+
+def test_timecop_command_head(tmp_path: Path) -> None:
+    """Test the timecop CLI command with --head option."""
+    csv_path = tmp_path / "test.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    result = runner.invoke(app, ["timecop", "--input", str(csv_path), "--head", "1"])
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+
+
+def test_timecop_command_missing_input() -> None:
+    """Test that the timecop CLI command fails without required --input."""
+    result = runner.invoke(app, ["timecop"])
+    assert result.exit_code != 0
+    assert "Missing option" in result.stderr or "required" in result.stderr.lower()
