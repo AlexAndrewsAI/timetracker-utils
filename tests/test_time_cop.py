@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from pydantic import ValidationError
 
@@ -220,16 +221,16 @@ def test_timecop_read_csv_string() -> None:
     cop = TimeCop()
     entries = cop.read_csv_string(SAMPLE_CSV)
     assert len(entries) == 12  # 12 data rows
-    assert all(isinstance(e, TimeEntry) for e in entries)
-    assert entries[0].project == "StellarCartography"
-    assert entries[0].hours == 2.5
+    assert isinstance(entries, pd.DataFrame)
+    assert entries.iloc[0]["project"] == "StellarCartography"
+    assert entries.iloc[0]["hours"] == 2.5
 
 
 def test_timecop_read_csv_string_empty_notes_default() -> None:
     """Test that empty notes fields load as empty strings."""
     cop = TimeCop()
     entries = cop.read_csv_string(SAMPLE_CSV)
-    assert entries[0].notes == ""
+    assert entries.iloc[0]["notes"] == ""
 
 
 def test_timecop_total_hours() -> None:
@@ -260,8 +261,8 @@ def test_timecop_entries_by_project() -> None:
     hydroponics_entries = cop.entries_by_project("Hydroponics")
     assert len(cartography_entries) == 4
     assert len(hydroponics_entries) == 3
-    assert all(e.project == "StellarCartography" for e in cartography_entries)
-    assert all(e.project == "Hydroponics" for e in hydroponics_entries)
+    assert all(cartography_entries["project"] == "StellarCartography")
+    assert all(hydroponics_entries["project"] == "Hydroponics")
 
 
 def test_timecop_entries_by_project_nonexistent() -> None:
@@ -269,7 +270,7 @@ def test_timecop_entries_by_project_nonexistent() -> None:
     cop = TimeCop()
     cop.read_csv_string(SAMPLE_CSV)
     entries = cop.entries_by_project("Nonexistent")
-    assert entries == []
+    assert entries.empty
 
 
 def test_timecop_entries_by_date() -> None:
@@ -278,7 +279,7 @@ def test_timecop_entries_by_date() -> None:
     cop.read_csv_string(SAMPLE_CSV)
     entries = cop.entries_by_date("1/15/2200")
     assert len(entries) == 3
-    assert all(e.date == "1/15/2200" for e in entries)
+    assert all(entries["date"] == "1/15/2200")
 
 
 def test_timecop_entries_by_date_nonexistent() -> None:
@@ -286,11 +287,11 @@ def test_timecop_entries_by_date_nonexistent() -> None:
     cop = TimeCop()
     cop.read_csv_string(SAMPLE_CSV)
     entries = cop.entries_by_date("1/1/2000")
-    assert entries == []
+    assert entries.empty
 
 
 def test_timecop_empty_csv(caplog: pytest.LogCaptureFixture) -> None:
-    """Test reading CSV with only headers returns empty list."""
+    """Test reading CSV with only headers returns empty DataFrame."""
     caplog.set_level(logging.INFO)
     cop = TimeCop()
     header_only_csv = (
@@ -298,7 +299,7 @@ def test_timecop_empty_csv(caplog: pytest.LogCaptureFixture) -> None:
         "Start Time,End Time,Time (hours),Notes\n"
     )
     entries = cop.read_csv_string(header_only_csv)
-    assert entries == []
+    assert entries.empty
     assert "Loaded 0 time entries" in caplog.records[0].message
 
 
@@ -357,13 +358,13 @@ def test_timecop_csv_with_fewer_data_columns_backfills_end_time() -> None:
     )
     entries = cop.read_csv_string(csv_data)
     assert len(entries) == 1
-    entry = entries[0]
-    assert entry.date == "4/13/2026"
-    assert entry.project == "Commute"
-    assert entry.start_time == datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
-    assert entry.end_time == datetime(2026, 4, 13, 11, 45, 0, tzinfo=timezone.utc)
-    assert entry.hours == 1.0  # Backfilled from end_time - start_time
-    assert entry.notes == ""  # Missing column defaults to ""
+    row = entries.iloc[0]
+    assert row["date"] == "4/13/2026"
+    assert row["project"] == "Commute"
+    assert row["start_time"] == datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
+    assert row["end_time"] == datetime(2026, 4, 13, 11, 45, 0, tzinfo=timezone.utc)
+    assert row["hours"] == 1.0  # Backfilled from end_time - start_time
+    assert row["notes"] == ""  # Missing column defaults to ""
 
 
 def test_time_entry_date_auto_filled_from_start_time() -> None:
@@ -469,38 +470,32 @@ def test_timecop_csv_with_none_values_from_dictreader() -> None:
     )
     entries = cop.read_csv_string(csv_data)
     assert len(entries) == 1
-    entry = entries[0]
-    assert entry.hours == 1.0  # Backfilled from end_time
-    assert entry.notes == ""  # None coerced to ""
+    row = entries.iloc[0]
+    assert row["hours"] == 1.0  # Backfilled from end_time
+    assert row["notes"] == ""  # None coerced to ""
 
 
 def test_timecop_csv_missing_end_time_backfills_end_time_from_hours() -> None:
     """Test that when End Time column is missing, hours backfills end_time."""
     cop = TimeCop()
-    csv_data = (
-        "Start Time,Time (hours),Notes\n"
-        '"2026-04-13T10:45:00.000Z",1.0,"testing"'
-    )
+    csv_data = 'Start Time,Time (hours),Notes\n"2026-04-13T10:45:00.000Z",1.0,"testing"'
     entries = cop.read_csv_string(csv_data)
     assert len(entries) == 1
-    entry = entries[0]
-    assert entry.hours == 1.0
-    assert entry.notes == "testing"
+    row = entries.iloc[0]
+    assert row["hours"] == 1.0
+    assert row["notes"] == "testing"
 
 
 def test_timecop_csv_end_time_none_backfills_hours() -> None:
     """Test that None End Time with hours backfills end_time."""
     cop = TimeCop()
-    csv_data = (
-        "Start Time,End Time,Time (hours)\n"
-        '"2026-04-13T10:45:00.000Z",,1.0'
-    )
+    csv_data = 'Start Time,End Time,Time (hours)\n"2026-04-13T10:45:00.000Z",,1.0'
     entries = cop.read_csv_string(csv_data)
     assert len(entries) == 1
-    entry = entries[0]
+    row = entries.iloc[0]
     # End Time is None from empty cell, hours is 1.0 -> backfill end_time
-    assert entry.hours == 1.0
-    assert entry.end_time is not None
+    assert row["hours"] == 1.0
+    assert row["end_time"] is not None
 
 
 def test_parse_datetime_validator_with_none() -> None:

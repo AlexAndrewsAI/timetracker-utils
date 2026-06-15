@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pandas as pd
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,10 @@ class TimeEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_date_from_start_time(self) -> "TimeEntry":
-        """If date is missing, fill it from start_time. If both present, validate consistency.
+        """Validate date against start_time.
+
+        If date is missing, fill it from start_time. If both present,
+        validate consistency.
 
         Returns:
             The validated TimeEntry instance.
@@ -65,9 +69,13 @@ class TimeEntry(BaseModel):
 
         """
         if not self.date and self.start_time:
-            self.date = f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
+            self.date = (
+                f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
+            )
         elif self.date and self.start_time:
-            expected_date = f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
+            expected_date = (
+                f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
+            )
             if self.date != expected_date:
                 msg = (
                     f"Date {self.date!r} does not match start_time date "
@@ -221,22 +229,22 @@ class TimeCop:
     Provides methods to load CSV data and access validated time entries.
 
     Attributes:
-        entries: A list of validated TimeEntry objects.
+        entries: A pandas DataFrame of validated time entries.
 
     """
 
     def __init__(self) -> None:
         """Initialize an empty TimeCop instance."""
-        self.entries: list[TimeEntry] = []
+        self.entries: pd.DataFrame = pd.DataFrame()
 
-    def read_csv(self, path: str | Path) -> list[TimeEntry]:
+    def read_csv(self, path: str | Path) -> pd.DataFrame:
         """Read and validate entries from a CSV file.
 
         Args:
             path: Path to the CSV file.
 
         Returns:
-            A list of validated TimeEntry objects.
+            A pandas DataFrame of validated time entries.
 
         Raises:
             FileNotFoundError: If the CSV file does not exist.
@@ -253,14 +261,14 @@ class TimeCop:
         content = filepath.read_text(encoding="utf-8")
         return self.read_csv_string(content)
 
-    def read_csv_string(self, csv_data: str) -> list[TimeEntry]:
+    def read_csv_string(self, csv_data: str) -> pd.DataFrame:
         """Read and validate entries from a CSV string.
 
         Args:
             csv_data: The CSV data as a string.
 
         Returns:
-            A list of validated TimeEntry objects.
+            A pandas DataFrame of validated time entries.
 
         Raises:
             csv.Error: If the CSV data cannot be parsed.
@@ -285,7 +293,16 @@ class TimeCop:
                     sorted(extra_cols),
                 )
 
-        self.entries = [TimeEntry(**row) for row in reader]  # type: ignore[arg-type]
+        validated_entries = [
+            TimeEntry(**row)
+            for row in reader  # type: ignore[arg-type]
+        ]
+        if validated_entries:
+            self.entries = pd.DataFrame(
+                [entry.model_dump() for entry in validated_entries]
+            )
+        else:
+            self.entries = pd.DataFrame()
         logger.info("Loaded %d time entries", len(self.entries))
         return self.entries
 
@@ -296,7 +313,9 @@ class TimeCop:
             The sum of hours for all entries.
 
         """
-        return round(sum(entry.hours for entry in self.entries), 4)
+        if self.entries.empty:
+            return 0.0
+        return round(float(self.entries["hours"].sum()), 4)
 
     def total_hours_by_project(self) -> dict[str, float]:
         """Calculate total hours grouped by project.
@@ -305,31 +324,40 @@ class TimeCop:
             A dictionary mapping project names to total hours.
 
         """
-        totals: dict[str, float] = {}
-        for entry in self.entries:
-            totals[entry.project] = totals.get(entry.project, 0.0) + entry.hours
-        return {project: round(hours, 4) for project, hours in totals.items()}
+        if self.entries.empty:
+            return {}
+        grouped = self.entries.groupby("project")["hours"].sum()
+        result: dict[str, float] = {
+            str(project): round(float(hours), 4) for project, hours in grouped.items()
+        }
+        return result
 
-    def entries_by_project(self, project: str) -> list[TimeEntry]:
+    def entries_by_project(self, project: str) -> pd.DataFrame:
         """Get all entries for a specific project.
 
         Args:
             project: The project name to filter by.
 
         Returns:
-            A list of TimeEntry objects matching the project.
+            A pandas DataFrame of entries matching the project.
 
         """
-        return [entry for entry in self.entries if entry.project == project]
+        if self.entries.empty:
+            return pd.DataFrame()
+        result: pd.DataFrame = self.entries[self.entries["project"] == project]
+        return result
 
-    def entries_by_date(self, date: str) -> list[TimeEntry]:
+    def entries_by_date(self, date: str) -> pd.DataFrame:
         """Get all entries for a specific date.
 
         Args:
             date: The date string to filter by (e.g. "4/13/2026").
 
         Returns:
-            A list of TimeEntry objects matching the date.
+            A pandas DataFrame of entries matching the date.
 
         """
-        return [entry for entry in self.entries if entry.date == date]
+        if self.entries.empty:
+            return pd.DataFrame()
+        result: pd.DataFrame = self.entries[self.entries["date"] == date]
+        return result

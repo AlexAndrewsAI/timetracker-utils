@@ -32,8 +32,6 @@ def test_cli_no_args_exits_with_error() -> None:
 
 def test_cli_callback_run_directly() -> None:
     """Test the main callback body directly to cover _ = TimeCop."""
-    from timetracker_utils.cli import main
-
     # main() is a Typer callback that expects options through Typer's context,
     # so we invoke it via the app with --help to reach the callback body
     result = runner.invoke(app, ["--help"])
@@ -50,7 +48,7 @@ def test_cli_main_body() -> None:
 
 def test_main_module_importable() -> None:
     """Test that the __main__ module can be imported."""
-    import timetracker_utils.__main__  # noqa: F401
+    import timetracker_utils.__main__
 
     assert timetracker_utils.__main__ is not None
 
@@ -58,6 +56,7 @@ def test_main_module_importable() -> None:
 def test_version_callback() -> None:
     """Test the version_callback function directly."""
     from click.exceptions import Exit as ClickExit
+
     from timetracker_utils.cli import version_callback
 
     with pytest.raises(ClickExit) as exc_info:
