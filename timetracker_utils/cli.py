@@ -10,6 +10,7 @@ from pathlib import Path
 import typer
 
 from timetracker_utils import __version__
+from timetracker_utils.datetime_utils import convert_column_tz
 from timetracker_utils.time_cop import TimeCop
 
 app = typer.Typer(help="Time tracker utilities CLI")
@@ -54,11 +55,23 @@ def timecop(
         "-h",
         help="Number of rows to display from the top of the DataFrame.",
     ),
+    timezone: str | None = typer.Option(
+        None,
+        "--timezone",
+        "-z",
+        help="Convert timestamps to this timezone (e.g. ET, PT, UTC).",
+    ),
 ) -> None:
     """Load a CSV time tracking file and display the DataFrame."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cop = TimeCop()
     cop.read_csv(input)
+    if timezone is not None:
+        for col in ("start_time", "end_time"):
+            if col in cop.entries.columns:
+                cop.entries[col] = convert_column_tz(
+                    cop.entries[col], timezone
+                )
     typer.echo(f"Loaded DataFrame ({len(cop.entries)} rows total):")
     typer.echo(cop.entries.head(head).to_string())
 

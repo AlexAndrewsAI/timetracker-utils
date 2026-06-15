@@ -102,3 +102,28 @@ def test_timecop_command_missing_input() -> None:
     result = runner.invoke(app, ["timecop"])
     assert result.exit_code != 0
     assert "Missing option" in result.stderr or "required" in result.stderr.lower()
+
+
+def test_timecop_command_timezone(tmp_path: Path) -> None:
+    """Test that --timezone converts timestamps in the DataFrame."""
+    csv_path = tmp_path / "test.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    result = runner.invoke(
+        app, ["timecop", "--input", str(csv_path), "--timezone", "ET"]
+    )
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+    assert "StellarCartography" in result.output
+    # UTC-4 means 09:00Z becomes 05:00 ET
+    assert "05:00" in result.output
+
+
+def test_timecop_command_timezone_short_flag(tmp_path: Path) -> None:
+    """Test that -z short flag works for timezone conversion."""
+    csv_path = tmp_path / "test.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    result = runner.invoke(app, ["timecop", "--input", str(csv_path), "-z", "PT"])
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+    # January 2200 is winter: PT is UTC-8, so 09:00Z becomes 01:00 PT
+    assert "01:00" in result.output
