@@ -163,21 +163,22 @@ def test_time_entry_empty_project_defaults_to_empty_string() -> None:
 
 def test_time_entry_with_datetime_object() -> None:
     """Test that TimeEntry accepts an already-parsed datetime object."""
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
 
     dt = datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
+    later = dt + timedelta(hours=1)
     entry = TimeEntry(
         date="4/13/2026",
         project="Commute",
         description="drive",
         combined="Commute: drive",
         start_time=dt,
-        end_time=dt,
+        end_time=later,
         hours=1.0,
         notes="",
     )
     assert entry.start_time == dt
-    assert entry.end_time == dt
+    assert entry.end_time == later
 
 
 def test_time_entry_datetime_without_tz_converted_to_utc() -> None:
@@ -345,13 +346,14 @@ def test_timecop_extra_columns_logged_as_warning(
     assert any("Location" in record.message for record in caplog.records)
 
 
-def test_timecop_csv_with_fewer_data_columns_defaults_to_none() -> None:
-    """Test that CSV data row with fewer columns than headers uses defaults."""
+def test_timecop_csv_with_fewer_data_columns_backfills_end_time() -> None:
+    """Test that CSV data row with fewer columns backfills end_time from hours."""
     cop = TimeCop()
     csv_data = (
         "Date,Project,Description,Combined Project & Description,"
         "Start Time,End Time,Time (hours),Notes\n"
-        '"4/13/2026","Commute","drive","Commute: drive","2026-04-13T10:45:00.000Z"\n'
+        '"4/13/2026","Commute","drive","Commute: drive",'
+        '"2026-04-13T10:45:00.000Z","2026-04-13T11:45:00.000Z",,\n'
     )
     entries = cop.read_csv_string(csv_data)
     assert len(entries) == 1
@@ -359,8 +361,8 @@ def test_timecop_csv_with_fewer_data_columns_defaults_to_none() -> None:
     assert entry.date == "4/13/2026"
     assert entry.project == "Commute"
     assert entry.start_time == datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
-    assert entry.end_time is None  # Missing column defaults to None
-    assert entry.hours == 0.0  # Missing column defaults to 0.0
+    assert entry.end_time == datetime(2026, 4, 13, 11, 45, 0, tzinfo=timezone.utc)
+    assert entry.hours == 1.0  # Backfilled from end_time - start_time
     assert entry.notes == ""  # Missing column defaults to ""
 
 
@@ -370,6 +372,7 @@ def test_time_entry_date_auto_filled_from_start_time() -> None:
 
     entry = TimeEntry(
         start_time="2026-04-13T10:45:00.000Z",
+        hours=1.0,
     )
     assert entry.date == "4/13/2026"
     assert entry.start_time == datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
@@ -380,6 +383,7 @@ def test_time_entry_date_and_start_time_consistent() -> None:
     entry = TimeEntry(
         date="4/13/2026",
         start_time="2026-04-13T10:45:00.000Z",
+        hours=1.0,
     )
     assert entry.date == "4/13/2026"
 
@@ -390,6 +394,7 @@ def test_time_entry_date_and_start_time_inconsistent() -> None:
         TimeEntry(
             date="4/14/2026",
             start_time="2026-04-13T10:45:00.000Z",
+            hours=1.0,
         )
 
 
@@ -399,14 +404,108 @@ def test_time_entry_start_time_is_required() -> None:
         TimeEntry()
 
 
-def test_time_entry_uses_defaults_with_only_start_time() -> None:
-    """Test that only start_time is required, all else defaults."""
-    entry = TimeEntry(start_time="2026-04-13T10:45:00.000Z")
+def test_time_entry_backfills_hours_from_end_time() -> None:
+    """Test that hours is backfilled from end_time when only end_time is provided."""
+    from datetime import datetime, timezone
+
+    entry = TimeEntry(
+        start_time="2026-04-13T10:45:00.000Z",
+        end_time="2026-04-13T11:45:00.000Z",
+    )
     assert entry.project == ""
     assert entry.description == ""
     assert entry.combined == ""
-    assert entry.end_time is None
-    assert entry.hours == 0.0
+    assert entry.end_time == datetime(2026, 4, 13, 11, 45, 0, tzinfo=timezone.utc)
+    assert entry.hours == 1.0  # Backfilled from end_time - start_time
     assert entry.notes == ""
-    assert entry.duration_seconds() is None  # end_time is None
-    assert entry.duration_minutes() is None  # end_time is None
+    assert entry.duration_seconds() == 3600.0
+
+
+def test_time_entry_backfills_end_time_from_hours() -> None:
+    """Test that end_time is backfilled from hours when only hours is provided."""
+    from datetime import datetime, timezone
+
+    entry = TimeEntry(
+        start_time="2026-04-13T10:45:00.000Z",
+        hours=1.0,
+    )
+    assert entry.end_time == datetime(2026, 4, 13, 11, 45, 0, tzinfo=timezone.utc)
+    assert entry.hours == 1.0
+    assert entry.duration_seconds() == 3600.0
+
+
+def test_time_entry_neither_end_time_nor_hours_raises() -> None:
+    """Test that providing neither end_time nor hours raises an error."""
+    with pytest.raises(ValidationError, match="At least one of"):
+        TimeEntry(start_time="2026-04-13T10:45:00.000Z")
+
+
+def test_time_entry_inconsistent_end_time_and_hours_raises() -> None:
+    """Test that inconsistent end_time and hours raises an error."""
+    with pytest.raises(ValidationError, match="does not match duration"):
+        TimeEntry(
+            start_time="2026-04-13T10:45:00.000Z",
+            end_time="2026-04-13T11:45:00.000Z",
+            hours=2.0,
+        )
+
+
+def test_time_entry_duration_with_missing_end_time_returns_none() -> None:
+    """Test that duration methods return None when end_time is not set."""
+    entry = TimeEntry(start_time="2026-04-13T10:45:00.000Z", hours=1.0)
+    # After backfill, end_time is always set. This tests the guard branch
+    # by deliberately constructing via __init__ and checking manually.
+    entry.end_time = None  # Force None for coverage
+    assert entry.duration_seconds() is None
+    assert entry.duration_minutes() is None
+
+
+def test_timecop_csv_with_none_values_from_dictreader() -> None:
+    """Test that None values from DictReader (missing trailing columns) are handled."""
+    cop = TimeCop()
+    csv_data = (
+        "Start Time,End Time,Time (hours),Notes\n"
+        '"2026-04-13T10:45:00.000Z","2026-04-13T11:45:00.000Z"'
+    )
+    entries = cop.read_csv_string(csv_data)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.hours == 1.0  # Backfilled from end_time
+    assert entry.notes == ""  # None coerced to ""
+
+
+def test_timecop_csv_missing_end_time_backfills_end_time_from_hours() -> None:
+    """Test that when End Time column is missing, hours backfills end_time."""
+    cop = TimeCop()
+    csv_data = (
+        "Start Time,Time (hours),Notes\n"
+        '"2026-04-13T10:45:00.000Z",1.0,"testing"'
+    )
+    entries = cop.read_csv_string(csv_data)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.hours == 1.0
+    assert entry.notes == "testing"
+
+
+def test_timecop_csv_end_time_none_backfills_hours() -> None:
+    """Test that None End Time with hours backfills end_time."""
+    cop = TimeCop()
+    csv_data = (
+        "Start Time,End Time,Time (hours)\n"
+        '"2026-04-13T10:45:00.000Z",,1.0'
+    )
+    entries = cop.read_csv_string(csv_data)
+    assert len(entries) == 1
+    entry = entries[0]
+    # End Time is None from empty cell, hours is 1.0 -> backfill end_time
+    assert entry.hours == 1.0
+    assert entry.end_time is not None
+
+
+def test_parse_datetime_validator_with_none() -> None:
+    """Test that parse_datetime returns None directly when passed None."""
+    from timetracker_utils.time_cop import TimeEntry
+
+    result = TimeEntry.parse_datetime(None)
+    assert result is None

@@ -7,7 +7,7 @@ entries using Pydantic models.
 import csv
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -46,8 +46,8 @@ class TimeEntry(BaseModel):
     end_time: datetime | None = Field(
         default=None, alias="End Time", description="End timestamp in ISO 8601 format"
     )
-    hours: float = Field(
-        default=0.0, alias="Time (hours)", description="Number of hours for the entry"
+    hours: float | None = Field(
+        default=None, alias="Time (hours)", description="Number of hours for the entry"
     )
     notes: str = Field(default="", alias="Notes", description="Optional notes")
 
@@ -65,7 +65,6 @@ class TimeEntry(BaseModel):
 
         """
         if not self.date and self.start_time:
-            # Format date as M/D/YYYY (e.g. "4/13/2026")
             self.date = f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
         elif self.date and self.start_time:
             expected_date = f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
@@ -73,6 +72,46 @@ class TimeEntry(BaseModel):
                 msg = (
                     f"Date {self.date!r} does not match start_time date "
                     f"{expected_date!r}"
+                )
+                raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_end_time_and_hours(self) -> "TimeEntry":
+        """Validate and backfill end_time and hours.
+
+        At least one of end_time or hours must be provided.
+        - If only end_time: backfill hours from start_time/end_time duration.
+        - If only hours: backfill end_time from start_time + hours.
+        - If both: validate they are consistent.
+
+        Returns:
+            The validated TimeEntry instance.
+
+        Raises:
+            ValueError: If neither end_time nor hours is provided, or if they are
+                inconsistent.
+
+        """
+        if self.end_time is None and self.hours is None:
+            msg = "At least one of End Time or Time (hours) must be provided"
+            raise ValueError(msg)
+
+        if self.end_time is not None and self.hours is None:
+            # Backfill hours from duration
+            delta = self.end_time - self.start_time
+            self.hours = round(delta.total_seconds() / 3600.0, 4)
+        elif self.hours is not None and self.end_time is None:
+            # Backfill end_time from start_time + hours
+            self.end_time = self.start_time + timedelta(hours=self.hours)
+        elif self.end_time is not None and self.hours is not None:
+            # Both present: validate consistency (within 1-minute tolerance)
+            delta = self.end_time - self.start_time
+            expected_hours = delta.total_seconds() / 3600.0
+            if abs(self.hours - expected_hours) > 1.0 / 60.0:
+                msg = (
+                    f"Hours {self.hours} does not match duration "
+                    f"({expected_hours:.4f}h) between start and end time"
                 )
                 raise ValueError(msg)
         return self
@@ -92,7 +131,7 @@ class TimeEntry(BaseModel):
             ValueError: If the value cannot be parsed as a valid ISO 8601 datetime.
 
         """
-        if value is None:
+        if value is None or value == "":
             return None
         if isinstance(value, datetime):
             return value
@@ -125,22 +164,24 @@ class TimeEntry(BaseModel):
 
     @field_validator("hours", mode="before")
     @classmethod
-    def validate_hours(cls, value: str | float | None) -> float:
+    def validate_hours(cls, value: str | float | None) -> float | None:
         """Validate hours value is non-negative and within reasonable range.
 
         Args:
             value: The hours value to validate.
 
         Returns:
-            The validated hours value.
+            The validated hours value, or None if value is None or empty string.
 
         Raises:
             ValueError: If the hours value is negative or unreasonably large.
 
         """
         if value is None:
-            return 0.0
+            return None
         if isinstance(value, str):
+            if value.strip() == "":
+                return None
             value = float(value)
         if value < 0:
             msg = f"Hours cannot be negative: {value}"
