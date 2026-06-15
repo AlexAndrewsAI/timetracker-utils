@@ -364,16 +364,49 @@ def test_timecop_csv_with_fewer_data_columns_defaults_to_none() -> None:
     assert entry.notes == ""  # Missing column defaults to ""
 
 
-def test_time_entry_uses_defaults_when_created_with_no_args() -> None:
-    """Test that TimeEntry can be created with all defaults."""
-    entry = TimeEntry()
-    assert entry.date == ""
+def test_time_entry_date_auto_filled_from_start_time() -> None:
+    """Test that date is auto-filled from start_time when not provided."""
+    from datetime import datetime, timezone
+
+    entry = TimeEntry(
+        start_time="2026-04-13T10:45:00.000Z",
+    )
+    assert entry.date == "4/13/2026"
+    assert entry.start_time == datetime(2026, 4, 13, 10, 45, 0, tzinfo=timezone.utc)
+
+
+def test_time_entry_date_and_start_time_consistent() -> None:
+    """Test that consistent date and start_time passes validation."""
+    entry = TimeEntry(
+        date="4/13/2026",
+        start_time="2026-04-13T10:45:00.000Z",
+    )
+    assert entry.date == "4/13/2026"
+
+
+def test_time_entry_date_and_start_time_inconsistent() -> None:
+    """Test that inconsistent date and start_time raises an error."""
+    with pytest.raises(ValidationError, match="does not match"):
+        TimeEntry(
+            date="4/14/2026",
+            start_time="2026-04-13T10:45:00.000Z",
+        )
+
+
+def test_time_entry_start_time_is_required() -> None:
+    """Test that start_time is required."""
+    with pytest.raises(ValidationError, match="Field required"):
+        TimeEntry()
+
+
+def test_time_entry_uses_defaults_with_only_start_time() -> None:
+    """Test that only start_time is required, all else defaults."""
+    entry = TimeEntry(start_time="2026-04-13T10:45:00.000Z")
     assert entry.project == ""
     assert entry.description == ""
     assert entry.combined == ""
-    assert entry.start_time is None
     assert entry.end_time is None
     assert entry.hours == 0.0
     assert entry.notes == ""
-    assert entry.duration_seconds() is None
-    assert entry.duration_minutes() is None
+    assert entry.duration_seconds() is None  # end_time is None
+    assert entry.duration_minutes() is None  # end_time is None

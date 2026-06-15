@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +40,8 @@ class TimeEntry(BaseModel):
         alias="Combined Project & Description",
         description="Combined project & description string",
     )
-    start_time: datetime | None = Field(
-        default=None,
-        alias="Start Time",
-        description="Start timestamp in ISO 8601 format",
+    start_time: datetime = Field(
+        ..., alias="Start Time", description="Start timestamp in ISO 8601 format"
     )
     end_time: datetime | None = Field(
         default=None, alias="End Time", description="End timestamp in ISO 8601 format"
@@ -54,6 +52,30 @@ class TimeEntry(BaseModel):
     notes: str = Field(default="", alias="Notes", description="Optional notes")
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
+
+    @model_validator(mode="after")
+    def validate_date_from_start_time(self) -> "TimeEntry":
+        """If date is missing, fill it from start_time. If both present, validate consistency.
+
+        Returns:
+            The validated TimeEntry instance.
+
+        Raises:
+            ValueError: If date and start_time are inconsistent.
+
+        """
+        if not self.date and self.start_time:
+            # Format date as M/D/YYYY (e.g. "4/13/2026")
+            self.date = f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
+        elif self.date and self.start_time:
+            expected_date = f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
+            if self.date != expected_date:
+                msg = (
+                    f"Date {self.date!r} does not match start_time date "
+                    f"{expected_date!r}"
+                )
+                raise ValueError(msg)
+        return self
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
