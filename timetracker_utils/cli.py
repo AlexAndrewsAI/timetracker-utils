@@ -11,6 +11,7 @@ import typer
 
 from timetracker_utils import __version__
 from timetracker_utils.config import load_config
+from timetracker_utils.database import Database
 from timetracker_utils.datetime_utils import convert_column_tz
 from timetracker_utils.time_cop import TimeCop
 
@@ -68,7 +69,8 @@ def timecop(
     cfg = load_config(config)
     cop = TimeCop()
     cop.read_csv(input)
-    cop.write_to_db(cfg.database)
+    db = Database()
+    db.write(cop.entries, cfg.database)
     for col in ("start_time", "end_time"):
         if col in cop.entries.columns:
             cop.entries[col] = convert_column_tz(
