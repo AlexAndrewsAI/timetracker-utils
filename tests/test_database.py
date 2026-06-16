@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from timetracker_utils.database import Database, TimeEntryDb
+from timetracker_utils.database import ActivityEntry, Database
 
 SAMPLE_DF = pd.DataFrame(
     {
@@ -31,9 +31,9 @@ SAMPLE_DF = pd.DataFrame(
 )
 
 
-def test_time_entry_db_fields() -> None:
-    """Test that TimeEntryDb has the expected fields (no computed columns)."""
-    entry = TimeEntryDb(
+def test_activity_entry_fields() -> None:
+    """Test that ActivityEntry has the expected fields (no computed columns)."""
+    entry = ActivityEntry(
         date="1/15/2200",
         project="StellarCartography",
         description="nebula mapping",
@@ -49,10 +49,10 @@ def test_time_entry_db_fields() -> None:
     assert not hasattr(entry, "hours")
 
 
-def test_time_entry_db_start_time_required() -> None:
-    """Test that start_time is required for TimeEntryDb."""
+def test_activity_entry_start_time_required() -> None:
+    """Test that start_time is required for ActivityEntry."""
     with pytest.raises(ValidationError, match="Field required"):
-        TimeEntryDb(
+        ActivityEntry(
             date="1/15/2200",
             project="StellarCartography",
             description="nebula mapping",
@@ -67,7 +67,7 @@ def test_database_write_creates_table(tmp_path: Path) -> None:
     assert db_path.exists()
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute("PRAGMA table_info(time_entries)")
+        cur = conn.execute("PRAGMA table_info(activities)")
         columns = {row[1] for row in cur.fetchall()}
         # Should have the core fields but NOT combined or hours
         assert "date" in columns
@@ -89,7 +89,7 @@ def test_database_write_stores_correct_count(tmp_path: Path) -> None:
     db.write(SAMPLE_DF, db_path)
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
         count = cur.fetchone()[0]
         assert count == 2
     finally:
@@ -106,7 +106,7 @@ def test_database_write_wipes_existing_data(tmp_path: Path) -> None:
     db.write(smaller_df, db_path)
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
         count = cur.fetchone()[0]
         assert count == 1  # Only 1 row after replacement
     finally:
@@ -131,10 +131,10 @@ def test_database_write_empty_dataframe(tmp_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))
     try:
         cur = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='time_entries'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='activities'"
         )
         assert cur.fetchone() is not None
-        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
         count = cur.fetchone()[0]
         assert count == 0
     finally:
@@ -148,7 +148,7 @@ def test_database_write_drops_hours_and_combined(tmp_path: Path) -> None:
     db.write(SAMPLE_DF, db_path)
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute("PRAGMA table_info(time_entries)")
+        cur = conn.execute("PRAGMA table_info(activities)")
         col_names = {row[1] for row in cur.fetchall()}
         assert "hours" not in col_names
         assert "combined" not in col_names
@@ -186,10 +186,10 @@ def test_database_write_from_timecop(tmp_path: Path) -> None:
     db.write(cop.entries, db_path)
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
         count = cur.fetchone()[0]
         assert count == 2
-        cur = conn.execute("SELECT project, description FROM time_entries")
+        cur = conn.execute("SELECT project, description FROM activities")
         rows = cur.fetchall()
         assert rows[0] == ("StellarCartography", "nebula mapping")
         assert rows[1] == ("Hydroponics", "crop harvest")

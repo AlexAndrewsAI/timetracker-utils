@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,20 @@ class TimeTrackerConfig(BaseModel):
         ...,
         description="Default timezone for timestamp conversions (e.g. ET, PT, UTC).",
     )
+
+    @field_validator("database", mode="before")
+    @classmethod
+    def expand_user_in_path(cls, value: str) -> str:
+        """Expand a leading ``~`` in the database path to the user's home directory.
+
+        Args:
+            value: The raw database path string from the config file.
+
+        Returns:
+            The path string with ``~`` expanded, if present.
+
+        """
+        return str(Path(value).expanduser())
 
 
 def load_config(config_path: Path) -> TimeTrackerConfig:

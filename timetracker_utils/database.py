@@ -1,6 +1,6 @@
 """Database module.
 
-Provides a Pydantic model for database-ready time entries and a ``Database``
+Provides a Pydantic model for activity entries and a ``Database``
 class that writes validated entries to a SQLite database.
 """
 
@@ -18,26 +18,26 @@ logger = logging.getLogger(__name__)
 _DROP_COLUMNS = {"combined", "hours"}
 
 
-class TimeEntryDb(BaseModel):
-    """A time tracking entry suitable for database persistence.
+class ActivityEntry(BaseModel):
+    """A single activity entry suitable for database persistence.
 
-    This model mirrors :class:`timetracker_utils.time_cop.TimeEntry` but
-    omits computed columns (``combined``, ``hours``).
+    Omits computed columns (``combined``, ``hours``) that are derived
+    at import time from the original CSV data.
 
     Attributes:
-        date: The date of the entry (e.g. "4/13/2026").
-        project: The project name.
-        description: A short description of the task.
+        date: The date of the activity (e.g. "4/13/2026").
+        project: The project or category name.
+        description: A short description of the activity.
         start_time: The start timestamp in ISO 8601 format.
         end_time: The end timestamp in ISO 8601 format.
-        notes: Optional notes.
+        notes: Optional notes about the activity.
 
     """
 
-    date: str = Field(default="", description="The date of the entry")
-    project: str = Field(default="", description="The project name")
+    date: str = Field(default="", description="The date of the activity")
+    project: str = Field(default="", description="The project or category name")
     description: str = Field(
-        default="", description="Short description of the task"
+        default="", description="Short description of the activity"
     )
     start_time: datetime = Field(
         ..., description="Start timestamp in ISO 8601 format"
@@ -45,14 +45,14 @@ class TimeEntryDb(BaseModel):
     end_time: datetime | None = Field(
         default=None, description="End timestamp in ISO 8601 format"
     )
-    notes: str = Field(default="", description="Optional notes")
+    notes: str = Field(default="", description="Optional notes about the activity")
 
 
 class Database:
-    """Handles persistence of time entries to a SQLite database.
+    """Handles persistence of activity entries to a SQLite database.
 
     Attributes:
-        entries: A pandas DataFrame of database-ready time entries.
+        entries: A pandas DataFrame of database-ready activity entries.
 
     """
 
@@ -64,7 +64,7 @@ class Database:
         """Write a DataFrame to the SQLite database, wiping any existing data.
 
         Drops computed columns (``combined``, ``hours``), validates each row
-        through :class:`TimeEntryDb`, and persists to a ``time_entries`` table.
+        through :class:`ActivityEntry`, and persists to an ``activities`` table.
 
         Args:
             df: The source DataFrame (typically from TimeCop).
@@ -79,11 +79,11 @@ class Database:
         if cols_to_drop:
             df = df.drop(columns=list(cols_to_drop))
 
-        # Validate each row through TimeEntryDb
+        # Validate each row through ActivityEntry
         validated = []
         for _, row in df.iterrows():
             validated.append(
-                TimeEntryDb(**row.to_dict())  # type: ignore[arg-type]
+                ActivityEntry(**row.to_dict())  # type: ignore[arg-type]
             )
 
         if validated:
@@ -96,15 +96,15 @@ class Database:
         conn = sqlite3.connect(str(db))
         try:
             if self.entries.empty:
-                conn.execute("DROP TABLE IF EXISTS time_entries")
+                conn.execute("DROP TABLE IF EXISTS activities")
                 conn.execute(
-                    "CREATE TABLE time_entries ("
+                    "CREATE TABLE activities ("
                     "date TEXT, project TEXT, description TEXT, "
                     "start_time TEXT, end_time TEXT, notes TEXT)"
                 )
             else:
                 self.entries.to_sql(
-                    "time_entries", conn, if_exists="replace", index=False
+                    "activities", conn, if_exists="replace", index=False
                 )
             logger.info(
                 "Wrote %d entries to database %s", len(self.entries), db

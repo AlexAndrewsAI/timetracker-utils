@@ -1,5 +1,6 @@
 """Tests for the configuration module."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,8 @@ def test_load_config(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     config = load_config(config_path)
-    assert config.database == "~/data/timetracker/db.sqlite3"
+    expected = str(Path(os.path.expanduser("~/data/timetracker/db.sqlite3")))
+    assert config.database == expected
     assert config.timezone == "ET"
 
 
@@ -49,5 +51,24 @@ def test_load_config_missing_fields(tmp_path: Path) -> None:
 def test_time_tracker_config_model() -> None:
     """Test the TimeTrackerConfig model directly."""
     config = TimeTrackerConfig(database="~/data/db.sqlite3", timezone="PT")
-    assert config.database == "~/data/db.sqlite3"
+    expected = str(Path(os.path.expanduser("~/data/db.sqlite3")))
+    assert config.database == expected
     assert config.timezone == "PT"
+
+
+def test_database_path_tilde_expansion() -> None:
+    """Test that tilde in database path is expanded to the home directory."""
+    config = TimeTrackerConfig(database="~/test.db", timezone="UTC")
+    assert config.database == str(Path.home() / "test.db")
+
+
+def test_database_path_absolute_not_expanded() -> None:
+    """Test that an absolute path without tilde is kept as-is."""
+    config = TimeTrackerConfig(database="/absolute/path/db.sqlite3", timezone="UTC")
+    assert config.database == "/absolute/path/db.sqlite3"
+
+
+def test_database_path_relative_not_expanded() -> None:
+    """Test that a relative path without tilde is kept as-is."""
+    config = TimeTrackerConfig(database="relative/path/db.sqlite3", timezone="UTC")
+    assert config.database == "relative/path/db.sqlite3"
