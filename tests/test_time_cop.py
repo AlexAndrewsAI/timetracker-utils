@@ -504,3 +504,87 @@ def test_parse_datetime_validator_with_none() -> None:
 
     result = TimeEntry.parse_datetime(None)
     assert result is None
+
+
+# write_to_db Tests
+
+
+def test_write_to_db_creates_table(tmp_path: Path) -> None:
+    """Test that write_to_db creates a SQLite database with the time_entries table."""
+    import sqlite3
+
+    cop = TimeCop()
+    cop.read_csv_string(SAMPLE_CSV)
+    db_path = tmp_path / "test.db"
+    cop.write_to_db(db_path)
+    assert db_path.exists()
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        count = cur.fetchone()[0]
+        assert count == 12
+    finally:
+        conn.close()
+
+
+def test_write_to_db_wipes_existing_data(tmp_path: Path) -> None:
+    """Test that write_to_db wipes existing data and replaces it."""
+    import sqlite3
+
+    cop = TimeCop()
+    cop.read_csv_string(SAMPLE_CSV)
+    db_path = tmp_path / "test.db"
+    cop.write_to_db(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        count = cur.fetchone()[0]
+        assert count == 12
+    finally:
+        conn.close()
+
+    # Now load a smaller CSV and write again — the table should be replaced
+    smaller_csv = """\
+"Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
+"1/15/2200","StellarCartography","nebula mapping","StellarCartography: nebula mapping","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","2.5",""
+"""
+    cop2 = TimeCop()
+    cop2.read_csv_string(smaller_csv)
+    cop2.write_to_db(db_path)
+    conn2 = sqlite3.connect(str(db_path))
+    try:
+        cur = conn2.execute("SELECT COUNT(*) FROM time_entries")
+        count = cur.fetchone()[0]
+        assert count == 1
+    finally:
+        conn2.close()
+
+
+def test_write_to_db_creates_parent_directories(tmp_path: Path) -> None:
+    """Test that write_to_db creates parent directories if they don't exist."""
+    cop = TimeCop()
+    cop.read_csv_string(SAMPLE_CSV)
+    db_path = tmp_path / "nested" / "dirs" / "test.db"
+    cop.write_to_db(db_path)
+    assert db_path.exists()
+
+
+def test_write_to_db_empty_dataframe(tmp_path: Path) -> None:
+    """Test that write_to_db handles an empty DataFrame gracefully."""
+    import sqlite3
+
+    cop = TimeCop()
+    db_path = tmp_path / "test.db"
+    cop.write_to_db(db_path)
+    assert db_path.exists()
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='time_entries'"
+        )
+        assert cur.fetchone() is not None
+        cur = conn.execute("SELECT COUNT(*) FROM time_entries")
+        count = cur.fetchone()[0]
+        assert count == 0
+    finally:
+        conn.close()

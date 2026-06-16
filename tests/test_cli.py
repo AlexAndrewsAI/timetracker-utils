@@ -22,8 +22,9 @@ SAMPLE_CSV = """\
 def _write_config(tmp_path: Path, timezone: str = "ET") -> Path:
     """Write a temporary config YAML file and return its path."""
     config_path = tmp_path / "timetracker.yml"
+    db_path = tmp_path / "data" / "timetracker" / "db.sqlite3"
     config_path.write_text(
-        yaml.dump({"database": "~/data/timetracker/db.sqlite3", "timezone": timezone}),
+        yaml.dump({"database": str(db_path), "timezone": timezone}),
         encoding="utf-8",
     )
     return config_path

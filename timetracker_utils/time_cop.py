@@ -7,6 +7,7 @@ entries using Pydantic models.
 import csv
 import io
 import logging
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -305,6 +306,51 @@ class TimeCop:
             self.entries = pd.DataFrame()
         logger.info("Loaded %d time entries", len(self.entries))
         return self.entries
+
+    def write_to_db(self, db_path: str | Path) -> None:
+        """Write the current entries to a SQLite database, wiping any existing data.
+
+        Creates a ``time_entries`` table from the current DataFrame. If the table
+        already exists it is dropped and recreated. When the DataFrame is empty the
+        table is still created with the correct schema.
+
+        Args:
+            db_path: Path to the SQLite database file.
+
+        """
+        db = Path(db_path)
+        db.parent.mkdir(parents=True, exist_ok=True)
+
+        conn = sqlite3.connect(str(db))
+        try:
+            if self.entries.empty:
+                # Create the table manually when DataFrame is empty
+                # (pandas to_sql can't handle empty DataFrames)
+                conn.execute("DROP TABLE IF EXISTS time_entries")
+                dtypes = {
+                    col: "TEXT" if dtype.kind in ("U", "O") else "REAL"
+                    for col, dtype in self.entries.dtypes.items()
+                }
+                if not dtypes:
+                    conn.execute(
+                        "CREATE TABLE time_entries (date TEXT, project TEXT, "
+                        "description TEXT, combined TEXT, start_time TEXT, "
+                        "end_time TEXT, hours REAL, notes TEXT)"
+                    )
+                else:
+                    col_defs = ", ".join(
+                        f"{col} {dtype}" for col, dtype in dtypes.items()
+                    )
+                    conn.execute(f"CREATE TABLE time_entries ({col_defs})")
+            else:
+                self.entries.to_sql(
+                    "time_entries", conn, if_exists="replace", index=False
+                )
+            logger.info(
+                "Wrote %d entries to database %s", len(self.entries), db
+            )
+        finally:
+            conn.close()
 
     def total_hours(self) -> float:
         """Calculate the total hours across all entries.

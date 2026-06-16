@@ -63,11 +63,12 @@ def timecop(
         help="Number of rows to display from the top of the DataFrame.",
     ),
 ) -> None:
-    """Load a CSV time tracking file and display the DataFrame."""
+    """Load a CSV time tracking file, write to database, and display the DataFrame."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(config)
     cop = TimeCop()
     cop.read_csv(input)
+    cop.write_to_db(cfg.database)
     for col in ("start_time", "end_time"):
         if col in cop.entries.columns:
             cop.entries[col] = convert_column_tz(
