@@ -5,6 +5,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from timetracker_utils import __version__
@@ -16,6 +17,16 @@ SAMPLE_CSV = """\
 "Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
 "1/15/2200","StellarCartography","nebula mapping","StellarCartography: nebula mapping","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","2.5",""
 """
+
+
+def _write_config(tmp_path: Path, timezone: str = "ET") -> Path:
+    """Write a temporary config YAML file and return its path."""
+    config_path = tmp_path / "timetracker.yml"
+    config_path.write_text(
+        yaml.dump({"database": "~/data/timetracker/db.sqlite3", "timezone": timezone}),
+        encoding="utf-8",
+    )
+    return config_path
 
 
 def test_cli_version() -> None:
@@ -82,7 +93,10 @@ def test_timecop_command(tmp_path: Path) -> None:
     """Test the timecop CLI command loads a CSV and prints the DataFrame."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
-    result = runner.invoke(app, ["timecop", "--input", str(csv_path)])
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+    )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
     assert "StellarCartography" in result.output
@@ -92,9 +106,20 @@ def test_timecop_command_head(tmp_path: Path) -> None:
     """Test the timecop CLI command with --head option."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
-    result = runner.invoke(app, ["timecop", "--input", str(csv_path), "--head", "1"])
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app,
+        ["timecop", "--config", str(config_path), "--input", str(csv_path), "--head", "1"],
+    )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
+
+
+def test_timecop_command_missing_config() -> None:
+    """Test that the timecop CLI command fails without required --config."""
+    result = runner.invoke(app, ["timecop"])
+    assert result.exit_code != 0
+    assert "Missing option" in result.stderr or "required" in result.stderr.lower()
 
 
 def test_timecop_command_missing_input() -> None:
@@ -104,12 +129,13 @@ def test_timecop_command_missing_input() -> None:
     assert "Missing option" in result.stderr or "required" in result.stderr.lower()
 
 
-def test_timecop_command_timezone(tmp_path: Path) -> None:
-    """Test that --timezone converts timestamps in the DataFrame."""
+def test_timecop_command_timezone_from_config(tmp_path: Path) -> None:
+    """Test that timezone from config converts timestamps in the DataFrame."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["timecop", "--input", str(csv_path), "--timezone", "ET"]
+        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
@@ -118,11 +144,14 @@ def test_timecop_command_timezone(tmp_path: Path) -> None:
     assert "05:00" in result.output
 
 
-def test_timecop_command_timezone_short_flag(tmp_path: Path) -> None:
-    """Test that -z short flag works for timezone conversion."""
+def test_timecop_command_different_timezone(tmp_path: Path) -> None:
+    """Test that a different timezone from config works correctly."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
-    result = runner.invoke(app, ["timecop", "--input", str(csv_path), "-z", "PT"])
+    config_path = _write_config(tmp_path, timezone="PT")
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+    )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
     # January 2200 is winter: PT is UTC-8, so 09:00Z becomes 01:00 PT
