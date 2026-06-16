@@ -48,12 +48,35 @@ def test_load_config_missing_fields(tmp_path: Path) -> None:
         load_config(config_path)
 
 
+def test_max_conflict_display_default() -> None:
+    """Test that max_conflict_display defaults to 100."""
+    config = TimeTrackerConfig(database="~/test.db", timezone="UTC")
+    assert config.max_conflict_display == 100
+
+
+def test_max_conflict_display_custom() -> None:
+    """Test that max_conflict_display can be set to a custom value."""
+    config = TimeTrackerConfig(
+        database="~/test.db", timezone="UTC", max_conflict_display=50
+    )
+    assert config.max_conflict_display == 50
+
+
+def test_max_conflict_display_zero() -> None:
+    """Test that max_conflict_display can be set to 0."""
+    config = TimeTrackerConfig(
+        database="~/test.db", timezone="UTC", max_conflict_display=0
+    )
+    assert config.max_conflict_display == 0
+
+
 def test_time_tracker_config_model() -> None:
     """Test the TimeTrackerConfig model directly."""
     config = TimeTrackerConfig(database="~/data/db.sqlite3", timezone="PT")
     expected = str(Path(os.path.expanduser("~/data/db.sqlite3")))
     assert config.database == expected
     assert config.timezone == "PT"
+    assert config.max_conflict_display == 100  # default
 
 
 def test_database_path_tilde_expansion() -> None:

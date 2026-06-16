@@ -20,6 +20,9 @@ class TimeTrackerConfig(BaseModel):
 
         timezone: Default timezone for timestamp conversions (e.g. ET, PT, UTC).
 
+        max_conflict_display: Maximum number of conflicting entries to display
+            when a merge conflict is detected (default 100).
+
     """
 
     database: str = Field(
@@ -29,6 +32,14 @@ class TimeTrackerConfig(BaseModel):
     timezone: str = Field(
         ...,
         description="Default timezone for timestamp conversions (e.g. ET, PT, UTC).",
+    )
+    max_conflict_display: int = Field(
+        default=100,
+        description=(
+            "Maximum number of conflicting entries "
+            "to display on merge conflict."
+        ),
+        ge=0,
     )
 
     @field_validator("database", mode="before")

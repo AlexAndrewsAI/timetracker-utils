@@ -70,7 +70,7 @@ def timecop(
     cop = TimeCop()
     cop.read_csv(input)
     db = Database()
-    db.write(cop.entries, cfg.database)
+    db.write(cop.entries, cfg.database, max_conflict_display=cfg.max_conflict_display)
     for col in ("start_time", "end_time"):
         if col in cop.entries.columns:
             cop.entries[col] = convert_column_tz(
