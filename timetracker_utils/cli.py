@@ -25,6 +25,7 @@ def version_callback(value: bool) -> None:
     if value:
         typer.echo(f"timetracker-utils version: {__version__}")
         raise typer.Exit()
+    return None
 
 
 @app.callback()
@@ -73,9 +74,7 @@ def timecop(
     db.write(cop.entries, cfg.database, max_conflict_display=cfg.max_conflict_display)
     for col in ("start_time", "end_time"):
         if col in cop.entries.columns:
-            cop.entries[col] = convert_column_tz(
-                cop.entries[col], cfg.timezone
-            )
+            cop.entries[col] = convert_column_tz(cop.entries[col], cfg.timezone)
     typer.echo(f"Loaded DataFrame ({len(cop.entries)} rows total):")
     typer.echo(cop.entries.head(head).to_string())
 

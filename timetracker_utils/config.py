@@ -36,8 +36,7 @@ class TimeTrackerConfig(BaseModel):
     max_conflict_display: int = Field(
         default=100,
         description=(
-            "Maximum number of conflicting entries "
-            "to display on merge conflict."
+            "Maximum number of conflicting entries to display on merge conflict."
         ),
         ge=0,
     )

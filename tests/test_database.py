@@ -455,16 +455,20 @@ def test_merge_mixed_new_and_identical(tmp_path: Path) -> None:
             "date": ["1/15/2200", "1/16/2200", "1/17/2200"],
             "project": ["A", "B", "C"],
             "description": ["descA", "descB", "descC"],
-            "start_time": pd.to_datetime([
-                "2200-01-15 09:00:00+00:00",
-                "2200-01-16 09:00:00+00:00",
-                "2200-01-17 09:00:00+00:00",
-            ]),
-            "end_time": pd.to_datetime([
-                "2200-01-15 11:00:00+00:00",
-                "2200-01-16 11:00:00+00:00",
-                "2200-01-17 11:00:00+00:00",
-            ]),
+            "start_time": pd.to_datetime(
+                [
+                    "2200-01-15 09:00:00+00:00",
+                    "2200-01-16 09:00:00+00:00",
+                    "2200-01-17 09:00:00+00:00",
+                ]
+            ),
+            "end_time": pd.to_datetime(
+                [
+                    "2200-01-15 11:00:00+00:00",
+                    "2200-01-16 11:00:00+00:00",
+                    "2200-01-17 11:00:00+00:00",
+                ]
+            ),
             "notes": ["", "", "Note C"],
         }
     )
@@ -478,16 +482,20 @@ def test_merge_mixed_new_and_identical(tmp_path: Path) -> None:
             "date": ["1/15/2200", "1/16/2200", "1/18/2200"],
             "project": ["A", "B", "D"],
             "description": ["descA", "descB", "descD"],
-            "start_time": pd.to_datetime([
-                "2200-01-15 09:00:00+00:00",
-                "2200-01-16 09:00:00+00:00",
-                "2200-01-18 10:00:00+00:00",
-            ]),
-            "end_time": pd.to_datetime([
-                "2200-01-15 11:00:00+00:00",
-                "2200-01-16 11:00:00+00:00",
-                "2200-01-18 12:00:00+00:00",
-            ]),
+            "start_time": pd.to_datetime(
+                [
+                    "2200-01-15 09:00:00+00:00",
+                    "2200-01-16 09:00:00+00:00",
+                    "2200-01-18 10:00:00+00:00",
+                ]
+            ),
+            "end_time": pd.to_datetime(
+                [
+                    "2200-01-15 11:00:00+00:00",
+                    "2200-01-16 11:00:00+00:00",
+                    "2200-01-18 12:00:00+00:00",
+                ]
+            ),
             "notes": ["Existing notes", "New notes for B", ""],
         }
     )
@@ -505,23 +513,17 @@ def test_merge_mixed_new_and_identical(tmp_path: Path) -> None:
         assert count == 4
 
         # Verify row 1 notes were filled (blank-fill merge)
-        cur = conn.execute(
-            "SELECT notes FROM activities WHERE project='A'"
-        )
+        cur = conn.execute("SELECT notes FROM activities WHERE project='A'")
         notes_a = cur.fetchone()[0]
         assert notes_a == "Existing notes"
 
         # Verify row 2 notes were filled
-        cur = conn.execute(
-            "SELECT notes FROM activities WHERE project='B'"
-        )
+        cur = conn.execute("SELECT notes FROM activities WHERE project='B'")
         notes_b = cur.fetchone()[0]
         assert notes_b == "New notes for B"
 
         # Verify row 3 notes still say "Note C" (unchanged)
-        cur = conn.execute(
-            "SELECT notes FROM activities WHERE project='C'"
-        )
+        cur = conn.execute("SELECT notes FROM activities WHERE project='C'")
         notes_c = cur.fetchone()[0]
         assert notes_c == "Note C"
 
@@ -556,6 +558,171 @@ def test_database_write_empty_dataframe(tmp_path: Path) -> None:
         cur = conn.execute("SELECT COUNT(*) FROM activities")
         count = cur.fetchone()[0]
         assert count == 0
+    finally:
+        conn.close()
+
+
+def test_database_normalise_missing_endtime_column() -> None:
+    """Test normalisation when the end_time column is missing from the DataFrame (hits line 246 else None)."""
+    df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "project": ["ProjA"],
+            "description": ["desc"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "notes": [""],
+        }
+    )
+    normalised = Database._normalise_dataframe(df)
+    assert "end_time" in normalised.columns
+    assert normalised["end_time"].iloc[0] is None
+
+
+def test_database_normalise_missing_date_column(tmp_path: Path) -> None:
+    """Test normalisation when the date column is missing from the DataFrame (hits line 246 empty string)."""
+    db_path = tmp_path / "test.db"
+    db = Database()
+    df = pd.DataFrame(
+        {
+            "project": ["ProjA"],
+            "description": ["desc"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:00:00+00:00"]),
+            "notes": [""],
+        }
+    )
+    db.write(df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT date FROM activities")
+        assert cur.fetchone()[0] == ""
+    finally:
+        conn.close()
+
+
+def test_rows_identical_with_nan_both_sides() -> None:
+    """Test _rows_identical when both values are pd.isna (hits line 438)."""
+    row_a = pd.Series({"date": None, "notes": None})
+    row_b = pd.Series({"date": None, "notes": None})
+    assert Database._rows_identical(row_a, row_b, include_key=False)
+
+
+def test_merge_empty_incoming_preserves_existing(tmp_path: Path) -> None:
+    """Test that merging an empty DataFrame with existing data preserves existing."""
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    # Merge with empty DataFrame — incoming is empty, existing stays
+    db.write(pd.DataFrame(), db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        assert cur.fetchone()[0] == 2
+    finally:
+        conn.close()
+
+
+def test_merge_key_with_nan_endtime(tmp_path: Path) -> None:
+    """Test that NaN values in key columns are handled when building merge keys (hits pd.isna branch)."""
+    db_path = tmp_path / "test.db"
+    db = Database()
+    # Write initial data with no end_time (will be None in DataFrame)
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "project": ["ProjA"],
+            "description": ["desc"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:00:00+00:00"]),
+            "notes": [""],
+        }
+    )
+    db.write(initial_df, db_path)
+
+    # New data with NaN in end_time (pd.NaT) — _make_key will hit pd.isna branch
+    incoming_df = pd.DataFrame(
+        {
+            "date": ["1/16/2200"],
+            "project": ["ProjB"],
+            "description": ["desc2"],
+            "start_time": pd.to_datetime(["2200-01-16 09:00:00+00:00"]),
+            "end_time": pd.Series([pd.NaT], dtype="datetime64[ns]"),
+            "notes": [""],
+        }
+    )
+    db.write(incoming_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        assert cur.fetchone()[0] == 2
+    finally:
+        conn.close()
+
+
+def test_merge_identical_with_nan_notes(tmp_path: Path) -> None:
+    """Test that identical rows with NaT values silently drop duplicates (hits pd.isna branch)."""
+    db_path = tmp_path / "test.db"
+    db = Database()
+    df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "project": ["ProjA"],
+            "description": ["desc"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.Series([pd.NaT], dtype="datetime64[ns]"),
+            "notes": [""],
+        }
+    )
+    db.write(df, db_path)
+    # Write exact same data again — identical row should be dropped
+    db.write(df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        assert cur.fetchone()[0] == 1  # No duplicate
+    finally:
+        conn.close()
+
+
+def test_merge_old_non_blank_new_blank(tmp_path: Path) -> None:
+    """Test merge when old row has non-blank values but new row has blank (hits fallthrough)."""
+    db_path = tmp_path / "test.db"
+    db = Database()
+
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "project": ["ProjA"],
+            "description": ["desc"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:00:00+00:00"]),
+            "notes": ["Original notes"],
+        }
+    )
+    db.write(initial_df, db_path)
+
+    # Same key but notes is blank — old is non-blank, new is blank.
+    # Not identical (notes differ).
+    # Not a blank-fill (old non-blank, new blank → _is_blank_fill returns False).
+    # Not a conflict (new is blank → _is_conflict returns False).
+    # Falls through to 'not resolved' branch.
+    incoming_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "project": ["ProjA"],
+            "description": ["desc"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:00:00+00:00"]),
+            "notes": [""],
+        }
+    )
+    db.write(incoming_df, db_path)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        # Old row preserved, new row added via fallthrough
+        assert cur.fetchone()[0] == 2
     finally:
         conn.close()
 

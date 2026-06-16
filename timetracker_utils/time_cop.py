@@ -293,10 +293,7 @@ class TimeCop:
                     sorted(extra_cols),
                 )
 
-        validated_entries = [
-            TimeEntry(**row)
-            for row in reader  # type: ignore[arg-type]
-        ]
+        validated_entries = [TimeEntry.model_validate(row) for row in reader]
         if validated_entries:
             self.entries = pd.DataFrame(
                 [entry.model_dump() for entry in validated_entries]

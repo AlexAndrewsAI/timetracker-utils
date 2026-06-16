@@ -47,9 +47,7 @@ class ActivityEntry(BaseModel):
     description: str = Field(
         default="", description="Short description of the activity"
     )
-    start_time: datetime = Field(
-        ..., description="Start timestamp in ISO 8601 format"
-    )
+    start_time: datetime = Field(..., description="Start timestamp in ISO 8601 format")
     end_time: datetime | None = Field(
         default=None, description="End timestamp in ISO 8601 format"
     )
@@ -172,18 +170,31 @@ class Database:
             )
 
         if validated:
-            incoming_df = pd.DataFrame(
-                [entry.model_dump() for entry in validated]
-            )
+            incoming_df = pd.DataFrame([entry.model_dump() for entry in validated])
         else:
             incoming_df = pd.DataFrame()
 
         # Normalise column types for consistent comparison
         incoming_df = self._normalise_dataframe(incoming_df)
 
-        conn = sqlite3.connect(str(db))
+    timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime"  [arg-type]
+timetimetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime"  [arg-type]
+timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime | None"  [arg-type]
+timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "float | None"  [arg-type]
+tests/test_cli.py:89: error: "version_callback" does not return a value (it only ever returns None)  [func-returns-value]
+Found 4 errors in 2 files (checked 13 source files)
+tracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime | None"  [arg-type]
+timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "float | None"  [arg-type]
+tests/test_cli.py:89: error: "version_callback" does not return a value (it only ever returns None)  [func-returns-value]
+Found 4 errors in 2 files (checked 13 source files)
+    conn = sqlite3.connect(str(db))
         try:
-            existing_df = self._read_existing(conn)
+    timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime"  [arg-type]
+timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime | None"  [arg-type]
+timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "float | None"  [arg-type]
+tests/test_cli.py:89: error: "version_callback" does not return a value (it only ever returns None)  [func-returns-value]
+Found 4 errors in 2 files (checked 13 source files)
+        existing_df = self._read_existing(conn)
             existing_df = self._normalise_dataframe(existing_df)
 
             if existing_df.empty:
@@ -203,14 +214,10 @@ class Database:
                     "start_time TEXT, end_time TEXT, notes TEXT)"
                 )
             else:
-                merged_df.to_sql(
-                    "activities", conn, if_exists="replace", index=False
-                )
+                merged_df.to_sql("activities", conn, if_exists="replace", index=False)
 
             self.entries = merged_df
-            logger.info(
-                "Wrote %d entries to database %s", len(merged_df), db
-            )
+            logger.info("Wrote %d entries to database %s", len(merged_df), db)
         finally:
             conn.close()
 
@@ -235,17 +242,19 @@ class Database:
 
         # Convert datetime columns to ISO string for consistent comparison
         for col in ["start_time", "end_time"]:
-            if col in df.columns and pd.api.types.is_datetime64_any_dtype(
-                df[col]
-            ):
+            if col in df.columns and pd.api.types.is_datetime64_any_dtype(df[col]):
                 df[col] = df[col].apply(
                     lambda x: x.isoformat() if pd.notna(x) else None
                 )
 
         # Ensure all expected columns exist
         expected_cols = [
-            "date", "project", "description",
-            "start_time", "end_time", "notes",
+            "date",
+            "project",
+            "description",
+            "start_time",
+            "end_time",
+            "notes",
         ]
         for col in expected_cols:
             if col not in df.columns:

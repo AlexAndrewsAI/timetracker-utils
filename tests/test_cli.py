@@ -86,8 +86,7 @@ def test_version_callback() -> None:
     assert exc_info.value.exit_code == 0
 
     # Should do nothing when value is False
-    result = version_callback(False)
-    assert result is None
+    version_callback(False)
 
 
 def test_timecop_command(tmp_path: Path) -> None:
@@ -110,7 +109,15 @@ def test_timecop_command_head(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
         app,
-        ["timecop", "--config", str(config_path), "--input", str(csv_path), "--head", "1"],
+        [
+            "timecop",
+            "--config",
+            str(config_path),
+            "--input",
+            str(csv_path),
+            "--head",
+            "1",
+        ],
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output

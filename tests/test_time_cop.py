@@ -303,6 +303,32 @@ def test_timecop_empty_csv(caplog: pytest.LogCaptureFixture) -> None:
     assert "Loaded 0 time entries" in caplog.records[0].message
 
 
+def test_timecop_total_hours_when_empty() -> None:
+    """Test total_hours returns 0.0 when no entries loaded."""
+    cop = TimeCop()
+    assert cop.total_hours() == 0.0
+
+
+def test_timecop_total_hours_by_project_when_empty() -> None:
+    """Test total_hours_by_project returns empty dict when no entries loaded."""
+    cop = TimeCop()
+    assert cop.total_hours_by_project() == {}
+
+
+def test_timecop_entries_by_project_when_empty() -> None:
+    """Test entries_by_project returns empty DataFrame when no entries loaded."""
+    cop = TimeCop()
+    result = cop.entries_by_project("Any")
+    assert result.empty
+
+
+def test_timecop_entries_by_date_when_empty() -> None:
+    """Test entries_by_date returns empty DataFrame when no entries loaded."""
+    cop = TimeCop()
+    result = cop.entries_by_date("1/1/2000")
+    assert result.empty
+
+
 def test_timecop_read_csv_file(tmp_path: Path) -> None:
     """Test reading CSV from a file path."""
     csv_path = tmp_path / "test_entries.csv"
@@ -496,6 +522,7 @@ def test_timecop_csv_end_time_none_backfills_hours() -> None:
     # End Time is None from empty cell, hours is 1.0 -> backfill end_time
     assert row["hours"] == 1.0
     assert row["end_time"] is not None
+
 
 def test_parse_datetime_validator_with_none() -> None:
     """Test that parse_datetime returns None directly when passed None."""
