@@ -8,8 +8,6 @@ from typing import Any
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from timetracker_utils.base_tracker import BaseTimeEntry
-
 logger = logging.getLogger(__name__)
 
 _DROP_COLUMNS = {"combined", "hours"}
@@ -30,9 +28,7 @@ class ActivityEntry(BaseModel):
     categories: list[str] = Field(
         default_factory=list, description="List of category strings"
     )
-    tags: list[str] = Field(
-        default_factory=list, description="List of tag strings"
-    )
+    tags: list[str] = Field(default_factory=list, description="List of tag strings")
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
 
@@ -53,7 +49,11 @@ def _serialise_lists(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["categories", "tags"]:
         if col in df.columns:
             df[col] = df[col].apply(
-                lambda x: json.dumps(x) if isinstance(x, list) and len(x) > 0 else ("" if _is_blank(x) else str(x))
+                lambda x: (
+                    json.dumps(x)
+                    if isinstance(x, list) and len(x) > 0
+                    else ("" if _is_blank(x) else str(x))
+                )
             )
     return df
 
@@ -63,7 +63,11 @@ def _deserialise_lists(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["categories", "tags"]:
         if col in df.columns:
             df[col] = df[col].apply(
-                lambda x: json.loads(x) if isinstance(x, str) and x.startswith("[") else ([] if _is_blank(x) else [str(x)])
+                lambda x: (
+                    json.loads(x)
+                    if isinstance(x, str) and x.startswith("[")
+                    else ([] if _is_blank(x) else [str(x)])
+                )
             )
     return df
 
@@ -71,8 +75,13 @@ def _deserialise_lists(df: pd.DataFrame) -> pd.DataFrame:
 def _format_row_for_display(row: dict[str, Any]) -> str:
     parts = []
     for col in [
-        "date", "activity", "start_time", "end_time",
-        "notes", "categories", "tags",
+        "date",
+        "activity",
+        "start_time",
+        "end_time",
+        "notes",
+        "categories",
+        "tags",
     ]:
         val = row.get(col, "")
         parts.append(f"{col}={val!r}")
@@ -117,7 +126,9 @@ class Database:
                 updated_count = 0
             else:
                 merged_df, new_count, skipped_count, updated_count = (
-                    self._merge_dataframes(existing_df, incoming_df, max_conflict_display)
+                    self._merge_dataframes(
+                        existing_df, incoming_df, max_conflict_display
+                    )
                 )
             if merged_df.empty:
                 conn.execute("DROP TABLE IF EXISTS activities")
@@ -132,7 +143,11 @@ class Database:
             written_count = new_count + updated_count
             logger.info(
                 "Wrote %d entries to database %s (%d new, %d updated, %d skipped)",
-                written_count, db, new_count, updated_count, skipped_count,
+                written_count,
+                db,
+                new_count,
+                updated_count,
+                skipped_count,
             )
         finally:
             conn.close()
@@ -165,8 +180,13 @@ class Database:
                     lambda x: x.isoformat() if pd.notna(x) else None
                 )
         expected_cols = [
-            "date", "activity", "start_time",
-            "end_time", "notes", "categories", "tags",
+            "date",
+            "activity",
+            "start_time",
+            "end_time",
+            "notes",
+            "categories",
+            "tags",
         ]
         for col in expected_cols:
             if col not in df.columns:
@@ -191,7 +211,9 @@ class Database:
             return pd.DataFrame()
 
     @staticmethod
-    def _rows_identical(row_a: pd.Series, row_b: pd.Series, include_key: bool = True) -> bool:
+    def _rows_identical(
+        row_a: pd.Series, row_b: pd.Series, include_key: bool = True
+    ) -> bool:
         cols = _MERGEABLE_COLUMNS + (_MERGE_KEY_COLUMNS if include_key else [])
         for col in cols:
             val_a = row_a.get(col)
@@ -273,21 +295,14 @@ class Database:
                     skipped_count += 1
                     resolved = True
                     break
-                if Database._is_blank_fill(old_row, inc_row):
-                    for col in _MERGEABLE_COLUMNS:
-                        new_val = inc_row.get(col)
-                        if not _is_blank(new_val):
-                            existing.at[match_idx, col] = new_val
+                updated = False
+                for col in _MERGEABLE_COLUMNS:
+                    new_val = inc_row.get(col)
+                    if not _is_blank(new_val):
+                        existing.at[match_idx, col] = new_val
+                        updated = True
+                if updated:
                     updated_count += 1
-                    resolved = True
-                    break
-                if Database._is_conflict(old_row, inc_row):
-                    conflict_row = {
-                        col: old_row.get(col, "") for col in _MERGEABLE_COLUMNS
-                    }
-                    for col in _MERGE_KEY_COLUMNS:
-                        conflict_row[col] = old_row.get(col, "")
-                    conflicts.append(conflict_row)
                     resolved = True
                     break
             if not resolved:

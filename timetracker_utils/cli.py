@@ -4,7 +4,6 @@ Provides a typer-based CLI for the package.
 """
 
 import csv
-import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -81,10 +80,18 @@ def _format_timecop_csv(entries: pd.DataFrame, output_path: Path) -> None:
             start_str = _format_datetime_iso(start_time)
             end_str = _format_datetime_iso(end_time)
             hours_str = _compute_hours(start_time, end_time)
-            writer.writerow([
-                date, project, description, combined,
-                start_str, end_str, hours_str, notes,
-            ])
+            writer.writerow(
+                [
+                    date,
+                    project,
+                    description,
+                    combined,
+                    start_str,
+                    end_str,
+                    hours_str,
+                    notes,
+                ]
+            )
 
 
 def _format_simple_csv(entries: pd.DataFrame, output_path: Path) -> None:
@@ -124,17 +131,21 @@ def _format_simple_csv(entries: pd.DataFrame, output_path: Path) -> None:
                 tags_str = str(tags)
             start_str = _format_simple_datetime(start_time)
             end_str = _format_simple_datetime(end_time)
-            duration_str, duration_min_str = _compute_simple_duration(start_time, end_time)
-            writer.writerow([
-                activity,
-                start_str,
-                end_str,
-                notes,
-                categories_str,
-                tags_str,
-                duration_str,
-                duration_min_str,
-            ])
+            duration_str, duration_min_str = _compute_simple_duration(
+                start_time, end_time
+            )
+            writer.writerow(
+                [
+                    activity,
+                    start_str,
+                    end_str,
+                    notes,
+                    categories_str,
+                    tags_str,
+                    duration_str,
+                    duration_min_str,
+                ]
+            )
 
 
 def _format_simple_datetime(val: object) -> str:
@@ -265,9 +276,12 @@ def timecop(
                     display_df["end_time"], cfg.timezone
                 )
         with pd.option_context(
-            "display.max_columns", None,
-            "display.max_colwidth", None,
-            "display.width", None,
+            "display.max_columns",
+            None,
+            "display.max_colwidth",
+            None,
+            "display.width",
+            None,
         ):
             typer.echo(str(display_df.head(head)))
 
@@ -289,16 +303,16 @@ def timecop(
 
 
 @app.command()
-def simple(
+def stt(
     config: Path = typer.Option(
         ..., "--config", "-c", help="Path to the YAML configuration file."
     ),
     input: Path = typer.Option(
-        None, "--input", "-i", help="Path to the simple-format CSV file to load."
+        None, "--input", "-i", help="Path to the STT-format CSV file to load."
     ),
     head: int = typer.Option(100, "--head", "-h", help="Rows to display."),
     output: Path = typer.Option(
-        None, "--output", "-o", help="Path to export database as simple-format CSV."
+        None, "--output", "-o", help="Path to export database as STT-format CSV."
     ),
 ) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -312,20 +326,16 @@ def simple(
             tracker.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
         )
         typer.echo(f"Loaded DataFrame ({len(tracker.entries)} rows total):")
+        # For STT format, naive timestamps are assumed to be in the config
+        # timezone already, so no timezone conversion is needed for display.
         display_df = tracker.entries.copy()
-        if not display_df.empty:
-            if "start_time" in display_df.columns:
-                display_df["start_time"] = convert_column_tz(
-                    display_df["start_time"], cfg.timezone
-                )
-            if "end_time" in display_df.columns:
-                display_df["end_time"] = convert_column_tz(
-                    display_df["end_time"], cfg.timezone
-                )
         with pd.option_context(
-            "display.max_columns", None,
-            "display.max_colwidth", None,
-            "display.width", None,
+            "display.max_columns",
+            None,
+            "display.max_colwidth",
+            None,
+            "display.width",
+            None,
         ):
             typer.echo(str(display_df.head(head)))
 

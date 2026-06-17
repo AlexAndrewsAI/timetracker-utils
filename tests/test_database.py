@@ -11,9 +11,7 @@ from pydantic import ValidationError
 from timetracker_utils.database import (
     ActivityEntry,
     Database,
-    MergeConflictError,
 )
-
 
 SAMPLE_DF = pd.DataFrame(
     {
@@ -71,8 +69,13 @@ def test_database_write_creates_table(tmp_path: Path) -> None:
         cur = conn.execute("PRAGMA table_info(activities)")
         columns = {row[1] for row in cur.fetchall()}
         assert columns == {
-            "date", "activity", "start_time",
-            "end_time", "notes", "categories", "tags",
+            "date",
+            "activity",
+            "start_time",
+            "end_time",
+            "notes",
+            "categories",
+            "tags",
         }
     finally:
         conn.close()
@@ -123,9 +126,7 @@ def test_database_write_overwrites_existing(tmp_path: Path) -> None:
     try:
         cur = conn.execute("SELECT COUNT(*) FROM activities")
         assert cur.fetchone()[0] == 1
-        cur = conn.execute(
-            "SELECT notes, categories, tags FROM activities"
-        )
+        cur = conn.execute("SELECT notes, categories, tags FROM activities")
         row = cur.fetchone()
         assert row[0] == "second write"
         assert json.loads(row[1]) == ["cat2"]

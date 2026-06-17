@@ -5,6 +5,7 @@ Simple Time Tracker CSV export format.
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -69,6 +70,25 @@ class SimpleTimeEntry(BaseTimeEntry):
             return ""
         return val
 
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def parse_datetime(cls, value: str | None) -> datetime | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            # For STT format: if no timezone is specified, keep the value
+            # as naive (treat it as local / config timezone).
+            has_explicit_tz = "Z" in value or (value.count("-") > 2 or "+" in value)
+            if not has_explicit_tz:
+                return dt.replace(tzinfo=None)
+            return dt
+        except (ValueError, TypeError) as exc:
+            msg = f"Invalid datetime value: {value!r}"
+            raise ValueError(msg) from exc
+
     @model_validator(mode="after")
     def validate_duration_crosscheck(self) -> "SimpleTimeEntry":
         dur_str = self.duration_str
@@ -121,16 +141,14 @@ class SimpleTimeTracker(BaseTimeTracker):
     def entries_by_activity(self, activity: str) -> "pd.DataFrame":
         """Filter entries by activity name."""
         import pandas as pd
+
         if self.entries.empty:
             return pd.DataFrame()
         return self.entries[self.entries["activity"] == activity]
 
     def total_hours_by_activity(self) -> dict[str, float]:
         """Total hours grouped by activity name."""
-        import pandas as pd
         if self.entries.empty:
             return {}
         grouped = self.entries.groupby("activity")["hours"].sum()
-        return {
-            str(name): round(float(total), 4) for name, total in grouped.items()
-        }
+        return {str(name): round(float(total), 4) for name, total in grouped.items()}

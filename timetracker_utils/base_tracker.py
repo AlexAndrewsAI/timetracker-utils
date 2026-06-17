@@ -27,7 +27,11 @@ logger = logging.getLogger(__name__)
 class BaseTimeEntry(BaseModel):
     """Shared base for all time-entry format models."""
 
-    date: str = Field(default="", description="Date (e.g. '4/13/2026')")
+    date: str = Field(
+        default="",
+        description="Date (e.g. '4/13/2026')",
+        validation_alias=AliasChoices("date", "Date"),
+    )
     activity: str = Field(
         default="",
         description="Activity / project name (DB canonical column)",
@@ -44,9 +48,15 @@ class BaseTimeEntry(BaseModel):
         validation_alias=AliasChoices("end_time", "End Time", "time ended"),
     )
     hours: float | None = Field(
-        default=None, description="Duration in hours (derived or provided)"
+        default=None,
+        description="Duration in hours (derived or provided)",
+        validation_alias=AliasChoices("hours", "Time (hours)"),
     )
-    notes: str = Field(default="", description="Optional notes")
+    notes: str = Field(
+        default="",
+        description="Optional notes",
+        validation_alias=AliasChoices("notes", "Notes"),
+    )
     categories: list[str] = Field(
         default_factory=list,
         description="Optional list of category strings",
@@ -57,11 +67,6 @@ class BaseTimeEntry(BaseModel):
         description="Optional list of tag strings",
         validation_alias=AliasChoices("tags", "record tags"),
     )
-    duration_minutes: float | None = Field(
-        default=None,
-        description="Duration in minutes (Simple format cross-check)",
-    )
-
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
     # -- validators (declaration order matters for model_validator) --
@@ -157,7 +162,7 @@ class BaseTimeEntry(BaseModel):
         if value > 24:
             msg = f"Hours exceed 24 (likely data error): {value}"
             raise ValueError(msg)
-        return round(value, 4)
+        return round(value + 1e-9, 4)
 
     # duration_minutes is now a regular field (used by SimpleTimeEntry);
     # the method below is kept for TimeCop backward-compat and is named
@@ -172,6 +177,12 @@ class BaseTimeEntry(BaseModel):
         if self.start_time is None or self.end_time is None:
             return None
         return (self.end_time - self.start_time).total_seconds()
+
+    def duration_minutes(self) -> float | None:
+        seconds = self.duration_seconds()
+        if seconds is None:
+            return None
+        return seconds / 60.0
 
 
 class BaseTimeTracker:
@@ -202,9 +213,8 @@ class BaseTimeTracker:
                 known_fields.add(field_name)
                 if field_info.alias:
                     known_fields.add(field_info.alias)
-                if (
-                    field_info.validation_alias is not None
-                    and hasattr(field_info.validation_alias, "choices")
+                if field_info.validation_alias is not None and hasattr(
+                    field_info.validation_alias, "choices"
                 ):
                     for alias in field_info.validation_alias.choices:
                         known_fields.add(alias)
@@ -238,9 +248,7 @@ class BaseTimeTracker:
             return {}
         group_field = self._GROUPBY_FIELD
         grouped = self.entries.groupby(group_field)["hours"].sum()
-        return {
-            str(name): round(float(total), 4) for name, total in grouped.items()
-        }
+        return {str(name): round(float(total), 4) for name, total in grouped.items()}
 
     def entries_by_activity(self, activity: str) -> pd.DataFrame:
         if self.entries.empty:

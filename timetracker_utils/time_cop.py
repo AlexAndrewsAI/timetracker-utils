@@ -56,15 +56,14 @@ class TimeCop(BaseTimeTracker):
 
     def entries_by_project(self, project: str) -> "pd.DataFrame":
         import pandas as pd
+
         if self.entries.empty:
             return pd.DataFrame()
         return self.entries[self.entries["project"] == project]
 
     def total_hours_by_project(self) -> dict[str, float]:
-        import pandas as pd
+
         if self.entries.empty:
             return {}
         grouped = self.entries.groupby("project")["hours"].sum()
-        return {
-            str(name): round(float(total), 4) for name, total in grouped.items()
-        }
+        return {str(name): round(float(total), 4) for name, total in grouped.items()}

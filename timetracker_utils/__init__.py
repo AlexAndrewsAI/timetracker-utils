@@ -12,8 +12,8 @@ __version__ = "0.1.1"
 __all__ = [
     "BaseTimeEntry",
     "BaseTimeTracker",
+    "SimpleTimeEntry",
+    "SimpleTimeTracker",
     "TimeCop",
     "TimeEntry",
-    "SimpleTimeTracker",
-    "SimpleTimeEntry",
 ]
