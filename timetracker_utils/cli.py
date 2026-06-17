@@ -15,7 +15,6 @@ import typer
 from timetracker_utils import __version__
 from timetracker_utils.config import load_config
 from timetracker_utils.database import Database
-from timetracker_utils.datetime_utils import convert_column_tz
 from timetracker_utils.time_cop import TimeCop
 
 app = typer.Typer(help="Time tracker utilities CLI")

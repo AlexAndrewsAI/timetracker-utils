@@ -189,8 +189,10 @@ class Database:
                 skipped_count = 0
                 updated_count = 0
             else:
-                merged_df, new_count, skipped_count, updated_count = self._merge_dataframes(
-                    existing_df, incoming_df, max_conflict_display
+                merged_df, new_count, skipped_count, updated_count = (
+                    self._merge_dataframes(
+                        existing_df, incoming_df, max_conflict_display
+                    )
                 )
 
             # Write the merged result
