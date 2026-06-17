@@ -185,8 +185,11 @@ class Database:
             if existing_df.empty:
                 # No existing data — just write the incoming data
                 merged_df = incoming_df
+                new_count = len(incoming_df)
+                skipped_count = 0
+                updated_count = 0
             else:
-                merged_df = self._merge_dataframes(
+                merged_df, new_count, skipped_count, updated_count = self._merge_dataframes(
                     existing_df, incoming_df, max_conflict_display
                 )
 
@@ -202,7 +205,15 @@ class Database:
                 merged_df.to_sql("activities", conn, if_exists="replace", index=False)
 
             self.entries = merged_df
-            logger.info("Wrote %d entries to database %s", len(merged_df), db)
+            written_count = new_count + updated_count
+            logger.info(
+                "Wrote %d entries to database %s (%d new, %d updated, %d skipped)",
+                written_count,
+                db,
+                new_count,
+                updated_count,
+                skipped_count,
+            )
         finally:
             conn.close()
 
@@ -300,7 +311,7 @@ class Database:
         existing: pd.DataFrame,
         incoming: pd.DataFrame,
         max_conflict_display: int,
-    ) -> pd.DataFrame:
+    ) -> tuple[pd.DataFrame, int, int, int]:
         """Merge an incoming DataFrame into an existing DataFrame.
 
         Args:
@@ -309,14 +320,15 @@ class Database:
             max_conflict_display: Maximum number of conflicts to list.
 
         Returns:
-            A merged DataFrame.
+            A tuple of (merged DataFrame, new rows count, updated rows count,
+            skipped (identical) rows count).
 
         Raises:
             MergeConflictError: If unresolvable conflicts are detected.
 
         """
         if incoming.empty:
-            return existing
+            return existing, 0, 0, 0
 
         # Build a key column for matching
         def _make_key(row: pd.Series) -> str:
@@ -338,6 +350,9 @@ class Database:
         # Separate incoming rows into: new, identical, blank-fill, conflict
         new_rows: list[pd.DataFrame] = []
         conflicts: list[dict[str, Any]] = []
+        new_count = 0
+        skipped_count = 0
+        updated_count = 0
 
         for inc_idx, inc_row in incoming.iterrows():
             inc_key = inc_row["_merge_key"]
@@ -351,6 +366,7 @@ class Database:
                 new_rows.append(
                     incoming.iloc[[inc_idx]].drop(columns=["_merge_key"])  # type: ignore[index]
                 )
+                new_count += 1
                 continue
 
             # There could be multiple matches; handle each independently
@@ -363,6 +379,7 @@ class Database:
                 if Database._rows_identical(old_row, inc_row, include_key=False):
                     # Rule 1: silently drop the incoming row
                     # Keep the existing row as-is
+                    skipped_count += 1
                     resolved = True
                     break
 
@@ -373,6 +390,7 @@ class Database:
                         new_val = inc_row.get(col)
                         if not _is_blank(new_val):
                             existing.at[match_idx, col] = new_val
+                    updated_count += 1
                     resolved = True
                     break
 
@@ -436,7 +454,7 @@ class Database:
             result = pd.concat([result, new_concat], ignore_index=True)
 
         # Ensure we return a DataFrame (mypy: drop() returns DataFrame)
-        return result  # type: ignore[no-any-return]
+        return result, new_count, skipped_count, updated_count  # type: ignore[no-any-return]
 
     @staticmethod
     def _rows_identical(
