@@ -15,6 +15,7 @@ import typer
 from timetracker_utils import __version__
 from timetracker_utils.config import load_config
 from timetracker_utils.database import Database
+from timetracker_utils.datetime_utils import convert_column_tz
 from timetracker_utils.time_cop import TimeCop
 
 app = typer.Typer(help="Time tracker utilities CLI")
@@ -237,6 +238,23 @@ def timecop(
             cop.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
         )
         typer.echo(f"Loaded DataFrame ({len(cop.entries)} rows total):")
+
+        # Apply timezone conversion to timestamp columns before display
+        display_df = cop.entries.copy()
+        if not display_df.empty and "start_time" in display_df.columns:
+            display_df["start_time"] = convert_column_tz(
+                display_df["start_time"], cfg.timezone
+            )
+        if not display_df.empty and "end_time" in display_df.columns:
+            display_df["end_time"] = convert_column_tz(
+                display_df["end_time"], cfg.timezone
+            )
+        with pd.option_context(
+            "display.max_columns", None,
+            "display.max_colwidth", None,
+            "display.width", None,
+        ):
+            typer.echo(str(display_df.head(head)))
 
     if output is not None:
         db = Database()
