@@ -1,14 +1,14 @@
 [project]
-name = "python-package-template"
+name = "timetracker-utils"
 dynamic = ["version"]  # Version is read from __init__.py by hatch
-description = "A simple package using pydantic"
+description = "Time tracker utilities with CSV parsing and validation via Pydantic"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
     {name = "AlexAndrewsAI", email = "alex.andrews.ai@protonmail.com"}
 ]
-keywords = ["hello", "world"]
+keywords = ["time", "tracking", "csv", "pydantic"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -21,7 +21,9 @@ classifiers = [
 ]
 
 dependencies = [
+    "pandas>=2.3.3",
     "pydantic>=2.0",
+    "pyyaml>=6.0.3",
     "typer>=0.12.0",
 ]
 
@@ -31,24 +33,28 @@ dev = [
     "ruff",
     "mypy",
     "pytest-cov>=7.1.0",
+    "pandas-stubs>=2.3.3.260113",
+    "uv>=0.11.21",
+    "types-pyyaml>=6.0.12.20260518",
 ]
 
 [project.scripts]
-hello-world = "python_package_template.cli:app"
+timetracker = "timetracker_utils.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/AlexAndrewsAI/python-package-template"
-Repository = "https://github.com/AlexAndrewsAI/python-package-template.git"
-Documentation = "https://github.com/AlexAndrewsAI/python-package-template#readme"
+Homepage = "https://github.com/AlexAndrewsAI/timetracker-utils"
+Repository = "https://github.com/AlexAndrewsAI/timetracker-utils.git"
+Documentation = "https://github.com/AlexAndrewsAI/timetracker-utils#readme"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]  # Configures hatch to read version from __init__.py
-path = "python_package_template/__init__.py"
+path = "timetracker_utils/__init__.py"
 
-[tool.uv]
+[tool.hatch.build.targets.wheel]
+packages = ["timetracker_utils"]
 
 [tool.ruff]
 line-length = 88
@@ -74,6 +80,7 @@ ignore = ["D203", "D213"]  # Ignore conflicting docstring style rules (one-blank
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]  # Allow assert statements in tests
+"timetracker_utils/cli.py" = ["B008"]  # Typer uses function calls in defaults
 
 
 [tool.mypy]
@@ -81,13 +88,19 @@ python_version = "3.10"
 warn_return_any = true  # Warn when returning Any from a function
 warn_unused_configs = true  # Warn about unused mypy configuration
 disallow_untyped_defs = true  # Require type hints on all function definitions
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = false
+init_typed = true
+warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=python_package_template --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=timetracker_utils --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
-source = ["python_package_template"]
+source = ["timetracker_utils"]
 omit = []
 parallel = true
 

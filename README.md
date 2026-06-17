@@ -1,19 +1,23 @@
-# python-package-template
+# timetracker-utils
 
-A basic template package demonstrating Python packaging best practices using **uv**, **pydantic**, and **pytest**.
+This repository, CLI, and all associated materials are provided on an **"as is" basis only**. We make no warranties or representations, express or implied, as to the accuracy, completeness, or fitness for a particular purpose of any content. At no point does the developer have any duty to correct, update, or support the provided material. **Use at your own risk.**
+
+Time tracker utilities for parsing, validating, and persisting CSV time tracking data. Built with **Pydantic**, **pandas**, **Typer**, and **SQLite**.
 
 ## Overview
 
-This is a minimal but well-structured Python package that serves as a template for building larger projects. It demonstrates:
+This package processes CSV time tracking exports (in the TimeCop format), validates each entry using Pydantic models, and persists the data to a SQLite database with intelligent merge semantics. It supports timezone-aware datetime handling, conflict detection, and round-trip export back to CSV.
 
-- Modern Python packaging with `pyproject.toml`
-- Type hints and static type checking with **mypy**
-- Data validation using **pydantic**
-- Code linting with **ruff**
-- Testing with **pytest**
-- Dependency management with **uv**
+## Features
 
-This package is intentionally simple to provide a clean starting point for your own projects.
+- **CSV parsing & validation**: Read and validate TimeCop-format CSV files with Pydantic
+- **Smart merge semantics**: Import CSV data into a SQLite database with three merge rules:
+  1. **Duplicate drop**: Identical rows are silently skipped
+  2. **Blank-fill**: Missing fields (date, notes) are filled in from later imports
+  3. **Conflict detection**: Non-blank conflicting values raise a `MergeConflictError`
+- **Timezone conversion**: Display timestamps in any IANA or abbreviation timezone (ET, PT, UTC, etc.)
+- **Round-trip CSV export**: Export the entire database back to TimeCop-format CSV
+- **CLI interface**: Full-featured command-line interface via Typer
 
 ## Installation
 
@@ -24,77 +28,105 @@ This package is intentionally simple to provide a clean starting point for your 
 
 ### Setup
 
-**Option 1: Use this template (recommended)**
-
-Visit https://github.com/AlexAndrewsAI/python-package-template and click the green "Use this template" button to create your own repository. Then clone your new repository:
-
 ```bash
-cd your-repo-name
-uv sync
-```
-
-**Option 2: Clone directly**
-
-```bash
-git clone https://github.com/AlexAndrewsAI/python-package-template.git
-cd python-package-template  
-uv sync
-```
-
-To install the package in editable mode (recommended for development) and test the CLI:
-
-```bash
-uv pip install -e .
-hello-world --version
+git clone https://github.com/AlexAndrewsAI/timetracker-utils.git
+cd timetracker-utils
+uv sync --dev
 ```
 
 ## Usage
 
-### Basic Example
-
-```python
-from python_package_template.hello import HelloWorld
-from python_package_template.config import Config
-
-# Create with default name
-hello = HelloWorld()
-greeting = hello.greet() # Hello, World!
-
-# Create with custom name
-hello = HelloWorld(Config(name="Alice"))
-personal_greeting = hello.greet() # Hello, Alice!
-```
-
 ### Configuration
 
-The `Config` class uses **pydantic** for validation:
+Create a YAML configuration file pointing to your SQLite database:
 
-```python
-from python_package_template.config import Config
-
-# Create with default name
-config = Config()
-
-# Create with custom name
-config = Config(name="Alice")
+```yaml
+database: /path/to/data/timetracker/db.sqlite3
+timezone: ET
+max_conflict_display: 100
 ```
 
-### Command Line Interface
+### CLI
 
-The package includes a CLI tool built with **typer**:
+The package provides a `timetracker` CLI with a single command `timecop`:
 
 ```bash
 # Show version
-uv run hello-world --version
+uv run timetracker --version
 
-# Run the CLI with default name
-uv run hello-world hello
+# Import a CSV file and display entries
+uv run timetracker timecop --config config.yml --input timecop_export.csv
 
-# Greet a specific name
-uv run hello-world hello --name Alice
+# Export the database back to CSV
+uv run timetracker timecop --config config.yml --output timecop_export.csv
 
-# Show help
-uv run hello-world hello --help
+# Both import and export in one command
+uv run timetracker timecop --config config.yml --input input.csv --output output.csv
+
+# Control how many rows to display
+uv run timetracker timecop --config config.yml --input input.csv --head 10
+```
+
+### Python API
+
+```python
+from timetracker_utils import TimeCop, TimeEntry
+
+# Parse a CSV string
+cop = TimeCop()
+csv_data = '''\
+"Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
+"4/13/2026","Research","literature review","Research: literature review","2026-04-13T09:00:00.000Z","2026-04-13T11:30:00.000Z","2.5",""
+'''
+df = cop.read_csv_string(csv_data)
+print(f"Loaded {len(df)} entries")
+print(f"Total hours: {cop.total_hours()}")
+print(f"Hours by project: {cop.total_hours_by_project()}")
+```
+
+```python
+from timetracker_utils.database import Database
+
+db = Database()
+
+# Write entries to a SQLite database (with merge semantics)
+db.write(df, "/path/to/db.sqlite3")
+
+# Read all entries back
+entries = db.read("/path/to/db.sqlite3")
+print(f"Database has {len(entries)} entries")
+```
+
+```python
+from timetracker_utils.datetime_utils import convert_column_tz
+
+# Convert timestamps to a specific timezone
+converted = convert_column_tz(df["start_time"], "America/New_York")
+```
+
+## Project Structure
+
+```
+timetracker-utils/
+├── AGENTS.md
+├── pyproject.toml
+├── README.md
+├── timetracker_utils/
+│   ├── __init__.py         # Package entry point, version
+│   ├── __main__.py         # python -m entry point
+│   ├── cli.py              # Typer CLI interface
+│   ├── config.py           # Pydantic config model (YAML-backed)
+│   ├── database.py         # SQLite persistence with merge logic
+│   ├── datetime_utils.py   # Timezone conversion utilities
+│   └── time_cop.py         # CSV parsing & Pydantic validation
+├── tests/
+│   ├── __init__.py
+│   ├── test_cli.py
+│   ├── test_config.py
+│   ├── test_database.py
+│   ├── test_datetime_utils.py
+│   └── test_time_cop.py
+└── uv.lock
 ```
 
 ## Development
@@ -105,94 +137,45 @@ uv run hello-world hello --help
 uv sync --dev
 ```
 
-This installs all dependencies and dev tools (pytest, ruff, mypy).
-
 ### Run Tests
 
 ```bash
-# Run all tests
+# Run all tests with coverage
 uv run pytest
 
-# Run specific test
-uv run pytest tests/test_hello.py::test_default_name
+# Run specific test file
+uv run pytest tests/test_time_cop.py
 ```
 
 ### Code Quality
 
 ```bash
-# Lint code
-uv run ruff check
-uv run ruff format
+# Lint
+uv run ruff check .
+
+# Auto-format
+uv run ruff format .
 
 # Type check
 uv run mypy .
 ```
 
-## Project Structure
+## Technology Stack
 
-- generate using `git ls-tree -r --name-only HEAD | tree --fromfile`
-```
-python-package-template/
-├── AGENTS.md
-├── .gitignore
-├── pyproject.toml
-├── python_package_template
-│   ├── cli.py
-│   ├── config.py
-│   ├── hello.py
-│   └── __init__.py
-├── README.md
-├── tests
-│   ├── __init__.py
-│   └── test_hello.py
-└── uv.lock
-```
-
-
-
-## Agent Instructions
-
-This template includes two agent instruction files for different workflows:
-
-### AGENTS.md
-Complete instructions for an AI agent with full automation. The agent automatically runs `pytest`, `ruff check`, and `mypy` after code changes to validate quality before handoff.
-
-**Best for:** Fully autonomous workflows where the agent handles all validation.
-
-### AGENTS_MANUAL_CHECKS.md
-Streamlined instructions that skip automated validation tools to reduce token usage. The agent writes code with quality standards in mind, but you manually run `pytest`, `ruff check`, and `mypy` for final validation.
-
-**Best for:** Cost-conscious workflows or when you prefer manual control over validation timing.
-
-Both files enforce the same code standards and project structure—only the automation scope differs.
-
-
-## Features
-
-- **Type hints**: Full type annotations for better IDE support and mypy compatibility
-- **Pydantic validation**: Runtime type validation and serialization
-- **Configuration**: Externalize settings using the `Config` class
-- **Testing**: Comprehensive test suite with pytest
-- **Code quality**: Automated linting with ruff and type checking with mypy
-
-## Python Best Practices Used
-
-- ✅ **Type hints**: All functions and classes use type annotations
-- ✅ **Docstrings**: Clear descriptions of modules, classes, and functions
-- ✅ **Project structure**: Proper package layout with separation of concerns
-- ✅ **Testing**: Comprehensive test coverage with pytest
-- ✅ **Configuration**: Externalized config using pydantic BaseModel
-- ✅ **Linting**: Code quality checks with ruff
-- ✅ **Dependency management**: Explicit dependencies in pyproject.toml
-- ✅ **Python versions**: Supports Python 3.10+
+| Component         | Tool          |
+|-------------------|---------------|
+| Environment       | uv            |
+| Data Validation   | Pydantic      |
+| CLI               | Typer         |
+| Data Processing   | pandas        |
+| Database          | SQLite        |
+| Testing           | pytest        |
+| Linting           | ruff          |
+| Type Checking     | mypy          |
 
 ## License
 
 MIT
-
-## Contributing
-
-This is a template repository. Feel free to use it as a starting point for your own projects.
 
 ## Author
 

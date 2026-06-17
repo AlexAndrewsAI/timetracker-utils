@@ -1,0 +1,9 @@
+"""Time tracker utilities.
+
+Provides CSV time tracking data parsing and validation via TimeCop.
+"""
+
+from timetracker_utils.time_cop import TimeCop, TimeEntry
+
+__version__ = "0.1.1"
+__all__ = ["TimeCop", "TimeEntry"]

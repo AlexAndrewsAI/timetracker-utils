@@ -1,0 +1,3 @@
+database: ~/data/timetracker/db.sqlite3
+timezone: ET
+
