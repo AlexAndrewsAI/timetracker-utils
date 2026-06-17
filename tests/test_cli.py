@@ -130,11 +130,12 @@ def test_timecop_command_missing_config() -> None:
     assert "Missing option" in result.stderr or "required" in result.stderr.lower()
 
 
-def test_timecop_command_missing_input() -> None:
-    """Test that the timecop CLI command fails without required --input."""
-    result = runner.invoke(app, ["timecop"])
-    assert result.exit_code != 0
-    assert "Missing option" in result.stderr or "required" in result.stderr.lower()
+def test_timecop_command_no_input_or_output_exits_with_error(tmp_path: Path) -> None:
+    """Test that the timecop CLI command fails without --input or --output."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(app, ["timecop", "--config", str(config_path)])
+    assert result.exit_code == 1
+    assert "input" in result.output or "output" in result.output
 
 
 def test_timecop_command_timezone_from_config(tmp_path: Path) -> None:
@@ -164,3 +165,131 @@ def test_timecop_command_different_timezone(tmp_path: Path) -> None:
     assert "Loaded DataFrame" in result.output
     # January 2200 is winter: PT is UTC-8, so 09:00Z becomes 01:00 PT
     assert "01:00" in result.output
+
+
+def test_timecop_output_empty_db(tmp_path: Path) -> None:
+    """Test --output with an empty database writes header-only CSV."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    output_path = tmp_path / "output.csv"
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--output", str(output_path)]
+    )
+    assert result.exit_code == 0
+    assert "Database is empty" in result.output
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "Date" in content
+    assert "Project" in content
+    assert "Start Time" in content
+    # No data rows should exist beyond the header
+    assert content.strip().count("\n") == 0  # Only header row
+
+
+def test_timecop_output_with_data(tmp_path: Path) -> None:
+    """Test --output exports a previously imported database to CSV."""
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    # First, import the CSV to populate the database
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code == 0
+    # Now export to output CSV
+    output_path = tmp_path / "output.csv"
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--output", str(output_path)]
+    )
+    assert result.exit_code == 0
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    # Check header
+    assert "Date" in content
+    assert "Project" in content
+    assert "Combined Project & Description" in content
+    assert "Start Time" in content
+    assert "End Time" in content
+    assert "Time (hours)" in content
+    # Check data row content
+    assert "StellarCartography" in content
+    assert "nebula mapping" in content
+    assert "StellarCartography: nebula mapping" in content
+    assert "2200-01-15T09:00:00.000Z" in content or "2200-01-15T09:00:00" in content
+    assert "2200-01-15T11:30:00.000Z" in content or "2200-01-15T11:30:00" in content
+    assert "2.5000" in content
+
+
+def test_timecop_output_combined_with_input(tmp_path: Path) -> None:
+    """Test using --output together with --input."""
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    output_path = tmp_path / "output.csv"
+    result = runner.invoke(
+        app,
+        [
+            "timecop",
+            "--config",
+            str(config_path),
+            "--input",
+            str(csv_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+    assert "Exporting" in result.output
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "StellarCartography" in content
+
+
+def test_timecop_output_non_existent_db(tmp_path: Path) -> None:
+    """Test --output when the database file does not exist yet."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    output_path = tmp_path / "output.csv"
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--output", str(output_path)]
+    )
+    assert result.exit_code == 0
+    assert "Database is empty" in result.output
+    assert output_path.exists()
+
+
+def test_format_datetime_iso() -> None:
+    """Test _format_datetime_iso helper function."""
+    from datetime import datetime, timedelta, timezone
+
+    from timetracker_utils.cli import _format_datetime_iso
+
+    # None input
+    assert _format_datetime_iso(None) == ""
+    # Empty string
+    assert _format_datetime_iso("") == ""
+    # Datetime object
+    dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+    result = _format_datetime_iso(dt)
+    assert result == "2200-01-15T09:00:00.000Z"
+    # ISO string
+    result = _format_datetime_iso("2200-01-15T09:00:00.000Z")
+    assert result == "2200-01-15T09:00:00.000Z"
+    # Non-UTC timezone
+    dt_est = datetime(2200, 1, 15, 5, 0, 0, tzinfo=timezone(timedelta(hours=-5)))
+    result = _format_datetime_iso(dt_est)
+    assert result == "2200-01-15T10:00:00.000Z"
+
+
+def test_compute_hours() -> None:
+    """Test _compute_hours helper function."""
+    from timetracker_utils.cli import _compute_hours
+
+    # None values
+    assert _compute_hours(None, None) == ""
+    assert _compute_hours("2020-01-01T00:00:00Z", None) == ""
+    # Valid times
+    result = _compute_hours("2200-01-15T09:00:00.000Z", "2200-01-15T11:30:00.000Z")
+    assert result == "2.5000"
+    # Rounding
+    result = _compute_hours("2200-01-15T09:00:00.000Z", "2200-01-15T12:00:00.000Z")
+    assert result == "3.0000"

@@ -177,24 +177,9 @@ class Database:
         # Normalise column types for consistent comparison
         incoming_df = self._normalise_dataframe(incoming_df)
 
-    timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime"  [arg-type]
-timetimetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime"  [arg-type]
-timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime | None"  [arg-type]
-timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "float | None"  [arg-type]
-tests/test_cli.py:89: error: "version_callback" does not return a value (it only ever returns None)  [func-returns-value]
-Found 4 errors in 2 files (checked 13 source files)
-tracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime | None"  [arg-type]
-timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "float | None"  [arg-type]
-tests/test_cli.py:89: error: "version_callback" does not return a value (it only ever returns None)  [func-returns-value]
-Found 4 errors in 2 files (checked 13 source files)
-    conn = sqlite3.connect(str(db))
+        conn = sqlite3.connect(str(db))
         try:
-    timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime"  [arg-type]
-timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "datetime | None"  [arg-type]
-timetracker_utils/time_cop.py:297: error: Argument 1 to "TimeEntry" has incompatible type "**dict[str | Any, str | Any]"; expected "float | None"  [arg-type]
-tests/test_cli.py:89: error: "version_callback" does not return a value (it only ever returns None)  [func-returns-value]
-Found 4 errors in 2 files (checked 13 source files)
-        existing_df = self._read_existing(conn)
+            existing_df = self._read_existing(conn)
             existing_df = self._normalise_dataframe(existing_df)
 
             if existing_df.empty:
@@ -218,6 +203,32 @@ Found 4 errors in 2 files (checked 13 source files)
 
             self.entries = merged_df
             logger.info("Wrote %d entries to database %s", len(merged_df), db)
+        finally:
+            conn.close()
+
+    def read(self, db_path: str | Path) -> pd.DataFrame:
+        """Read all entries from the database.
+
+        Args:
+            db_path: Path to the SQLite database file.
+
+        Returns:
+            A DataFrame of all entries in the database, or an empty
+            DataFrame if the table does not exist or has no data.
+
+        """
+        db = Path(db_path)
+        if not db.exists():
+            logger.info("Database %s does not exist, returning empty DataFrame", db)
+            self.entries = pd.DataFrame()
+            return self.entries
+
+        conn = sqlite3.connect(str(db))
+        try:
+            result = self._read_existing(conn)
+            self.entries = result
+            logger.info("Read %d entries from database %s", len(result), db)
+            return result
         finally:
             conn.close()
 
