@@ -1,4 +1,4 @@
-"""Main entry point for python -m python_package_template."""
+"""Main entry point for python -m timetracker_utils."""
 
 from timetracker_utils.cli import app
 

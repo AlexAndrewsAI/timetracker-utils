@@ -280,6 +280,36 @@ def test_format_datetime_iso() -> None:
     assert result == "2200-01-15T10:00:00.000Z"
 
 
+def test_format_datetime_iso_unparseable_string() -> None:
+    """Test _format_datetime_iso with an unparseable string (hits except branch)."""
+    from timetracker_utils.cli import _format_datetime_iso
+
+    # Unparseable string should return as-is
+    result = _format_datetime_iso("not-a-date")
+    assert result == "not-a-date"
+
+
+def test_format_datetime_iso_naive_datetime() -> None:
+    """Test _format_datetime_iso with a naive datetime (hits tzinfo is None branch)."""
+    from datetime import datetime
+
+    from timetracker_utils.cli import _format_datetime_iso
+
+    dt = datetime(2200, 1, 15, 9, 0, 0)  # No tzinfo
+    result = _format_datetime_iso(dt)
+    # Should be treated as UTC
+    assert result == "2200-01-15T09:00:00.000Z"
+
+
+def test_format_datetime_iso_non_datetime_type() -> None:
+    """Test _format_datetime_iso with a non-datetime, non-string type (hits else branch)."""
+    from timetracker_utils.cli import _format_datetime_iso
+
+    # Integer input hits the else: return str(val) branch
+    result = _format_datetime_iso(42)
+    assert result == "42"
+
+
 def test_compute_hours() -> None:
     """Test _compute_hours helper function."""
     from timetracker_utils.cli import _compute_hours
@@ -293,3 +323,43 @@ def test_compute_hours() -> None:
     # Rounding
     result = _compute_hours("2200-01-15T09:00:00.000Z", "2200-01-15T12:00:00.000Z")
     assert result == "3.0000"
+
+
+def test_compute_hours_empty_string() -> None:
+    """Test _compute_hours with empty string start/end times."""
+    from timetracker_utils.cli import _compute_hours
+
+    # Empty start time
+    assert _compute_hours("", "2200-01-15T11:30:00.000Z") == ""
+    # Empty end time
+    assert _compute_hours("2200-01-15T09:00:00.000Z", "") == ""
+
+
+def test_compute_hours_datetime_objects() -> None:
+    """Test _compute_hours with datetime objects (hits isinstance(datetime) branch)."""
+    from datetime import datetime, timezone
+
+    from timetracker_utils.cli import _compute_hours
+
+    start = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2200, 1, 15, 11, 30, 0, tzinfo=timezone.utc)
+    result = _compute_hours(start, end)
+    assert result == "2.5000"
+
+
+def test_compute_hours_invalid_string() -> None:
+    """Test _compute_hours with invalid time string (hits except branch)."""
+    from timetracker_utils.cli import _compute_hours
+
+    # Invalid string should be caught by ValueError from fromisoformat
+    result = _compute_hours("not-a-date", "2200-01-15T11:30:00.000Z")
+    assert result == ""
+
+
+def test_compute_hours_non_datetime_type() -> None:
+    """Test _compute_hours with non-datetime, non-string types."""
+    from timetracker_utils.cli import _compute_hours
+
+    # Integer types hit the elif isinstance(x, datetime) else branch and return ""
+    result = _compute_hours(100, 200)
+    assert result == ""

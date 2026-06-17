@@ -56,8 +56,6 @@ path = "timetracker_utils/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["timetracker_utils"]
 
-[tool.uv]
-
 [tool.ruff]
 line-length = 88
 target-version = "py310"

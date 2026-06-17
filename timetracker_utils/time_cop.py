@@ -54,6 +54,13 @@ class TimeEntry(BaseModel):
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
+    # NOTE: Validator ordering matters here. `validate_date_from_start_time`
+    # runs before `validate_end_time_and_hours` (declaration order for
+    # model_validator(mode="after")). This ensures `self.date` is filled
+    # (from start_time) before `validate_end_time_and_hours` potentially
+    # references it. Do not reorder these validators without updating
+    # the dependent logic.
+
     @model_validator(mode="after")
     def validate_date_from_start_time(self) -> "TimeEntry":
         """Validate date against start_time.

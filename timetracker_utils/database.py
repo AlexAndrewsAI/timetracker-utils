@@ -410,6 +410,10 @@ class Database:
 
             if not resolved:
                 # No matching logic applied — treat as new row (shouldn't happen)
+                logger.warning(
+                    "Unresolved merge for row with key %s — treating as new",
+                    inc_key,
+                )
                 new_rows.append(
                     incoming.iloc[[inc_idx]].drop(columns=["_merge_key"])  # type: ignore[index]
                 )

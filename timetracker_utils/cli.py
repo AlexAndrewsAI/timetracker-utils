@@ -60,40 +60,29 @@ def _format_timecop_csv(entries: pd.DataFrame, output_path: Path) -> None:
         output_path: Path to write the CSV file.
 
     """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Shared header row for timecop CSV format
+    header = [
+        "Date",
+        "Project",
+        "Description",
+        "Combined Project & Description",
+        "Start Time",
+        "End Time",
+        "Time (hours)",
+        "Notes",
+    ]
+
     if entries.empty:
-        # Write just the header row
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-            writer.writerow(
-                [
-                    "Date",
-                    "Project",
-                    "Description",
-                    "Combined Project & Description",
-                    "Start Time",
-                    "End Time",
-                    "Time (hours)",
-                    "Notes",
-                ]
-            )
+            writer.writerow(header)
         return
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-        writer.writerow(
-            [
-                "Date",
-                "Project",
-                "Description",
-                "Combined Project & Description",
-                "Start Time",
-                "End Time",
-                "Time (hours)",
-                "Notes",
-            ]
-        )
+        writer.writerow(header)
 
         for _, row in entries.iterrows():
             date = str(row.get("date", ""))
@@ -179,15 +168,19 @@ def _compute_hours(start_time: object, end_time: object) -> str:
     try:
         if isinstance(start_time, str):
             start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        elif isinstance(start_time, datetime):
+            start_dt = start_time
         else:
-            start_dt = start_time  # type: ignore[assignment]
+            return ""
 
         if isinstance(end_time, str):
             end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+        elif isinstance(end_time, datetime):
+            end_dt = end_time
         else:
-            end_dt = end_time  # type: ignore[assignment]
+            return ""
 
-        delta = end_dt - start_dt  # type: ignore[operator]
+        delta = end_dt - start_dt
         hours = delta.total_seconds() / 3600.0
         return f"{hours:.4f}"
     except (ValueError, TypeError):
@@ -250,9 +243,12 @@ def timecop(
                 display_df["end_time"], cfg.timezone
             )
         with pd.option_context(
-            "display.max_columns", None,
-            "display.max_colwidth", None,
-            "display.width", None,
+            "display.max_columns",
+            None,
+            "display.max_colwidth",
+            None,
+            "display.width",
+            None,
         ):
             typer.echo(str(display_df.head(head)))
 
