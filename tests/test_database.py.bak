@@ -1,0 +1,657 @@
+"""Tests for the Database module."""
+# ruff: noqa: E501 - CSV data lines exceed line length limit
+# mypy: ignore-errors
+
+import json
+import sqlite3
+from pathlib import Path
+
+import pandas as pd
+import pytest
+from pydantic import ValidationError
+
+from timetracker_utils.database import (
+    ActivityEntry,
+    Database,
+    MergeConflictError,
+)
+
+
+SAMPLE_DF = pd.DataFrame(
+    {
+        "date": ["1/15/2200", "1/16/2200"],
+        "activity": ["StellarCartography", "Hydroponics"],
+        "start_time": pd.to_datetime(
+            ["2200-01-15 09:00:00+00:00", "2200-01-16 13:00:00+00:00"]
+        ),
+        "end_time": pd.to_datetime(
+            ["2200-01-15 11:30:00+00:00", "2200-01-16 14:45:00+00:00"]
+        ),
+        "hours": [2.5, 1.75],
+        "notes": ["", ""],
+        "categories": [["nebula mapping"], ["crop harvest"]],
+        "tags": [["tag1"], []],
+    }
+)
+
+
+# ── ActivityEntry model ────────────────────────────────────────────────
+
+def test_activity_entry_fields() -> None:
+    """Test that ActivityEntry exposes the expected DB columns only."""
+    entry = ActivityEntry(
+        date="1/15/2200",
+        activity="StellarCartography",
+        categories=["nebula mapping"],
+        tags=["tag1"],
+        start_time="2200-01-15T09:00:00.000Z",
+        end_time="2200-01-15T11:30:00.000Z",
+        notes="",
+    )
+    assert entry.date == "1/15/2200"
+    assert entry.activity == "StellarCartography"
+    assert entry.categories == ["nebula mapping"]
+    assert entry.tags == ["tag1"]
+    # Legacy fields must NOT exist
+    assert not hasattr(entry, "combined")
+    assert not hasattr(entry, "hours")
+    assert not hasattr(entry, "project")
+    assert not hasattr(entry, "description")
+
+
+def test_activity_entry_start_time_required() -> None:
+    with pytest.raises(ValidationError, match="Field required"):
+        ActivityEntry(
+            date="1/15/2200",
+            activity="StellarCartography",
+            categories=[],
+            tags=[],
+            notes="",
+        )
+
+
+def test_activity_entry_activity_required() -> None:
+    with pytest.raises(ValidationError, match="Field required"):
+        ActivityEntry(
+            date="1/15/2200",
+            categories=[],
+            tags=[],
+            start_time="2200-01-15T09:00:00.000Z",
+            end_time="2200-01-15T11:30:00.000Z",
+            notes="",
+        )
+
+
+def test_activity_entry_default_categories_and_tags() -> None:
+    entry = ActivityEntry(
+        date="1/15/2200",
+        activity="StellarCartography",
+        start_time="2200-01-15T09:00:00.000Z",
+        end_time="2200-01-15T11:30:00.000Z",
+        notes="",
+    )
+    assert entry.categories == []
+    assert entry.tags == []
+
+
+# ── Write / read round-trip ────────────────────────────────────────────
+
+def test_database_write_creates_table(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    assert db_path.exists()
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("PRAGMA table_info(activities)")
+        columns = {row[1] for row in cur.fetchall()}
+        assert "date" in columns
+        assert "activity" in columns
+        assert "start_time" in columns
+        assert "end_time" in columns
+        assert "notes" in columns
+        assert "categories" in columns
+        assert "tags" in columns
+        assert "combined" not in columns
+        assert "hours" not in columns
+        assert "project" not in columns
+        assert "description" not in columns
+    finally:
+        conn.close()
+
+
+def test_database_write_stores_correct_count(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        count = cur.fetchone()[0]
+        assert count == 2
+    finally:
+        conn.close()
+
+
+def test_database_write_merge_keeps_existing_when_no_overlap(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+
+    new_df = pd.DataFrame(
+        {
+            "date": ["1/17/2200"],
+            "activity": ["Astrobiology"],
+            "start_time": pd.to_datetime(["2200-01-17 10:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-17 12:00:00+00:00"]),
+            "hours": [2.0],
+            "notes": [""],
+            "categories": [["sample analysis"]],
+            "tags": [[]],
+        }
+    )
+    db.write(new_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        count = cur.fetchone()[0]
+        assert count == 3
+    finally:
+        conn.close()
+
+
+# ── Merge Rule 1: Identical rows silently dropped ─────────────────────
+
+def test_merge_drops_identical_row(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": [""],
+            "categories": [["nebula mapping"]],
+            "tags": [["tag1"]],
+        }
+    )
+    db.write(initial_df, db_path)
+    db.write(initial_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        count = cur.fetchone()[0]
+        assert count == 1
+    finally:
+        conn.close()
+
+
+def test_merge_drops_identical_across_non_key_fields(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": [""],
+            "categories": [["nebula mapping"]],
+            "tags": [["tag1"]],
+        }
+    )
+    db.write(initial_df, db_path)
+    # Same key but richer metadata should be identical
+    second_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": [""],
+            "categories": [["nebula mapping"]],
+            "tags": [["tag1"]],
+        }
+    )
+    db.write(second_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        count = cur.fetchone()[0]
+        assert count == 1
+    finally:
+        conn.close()
+
+
+# ── Merge Rule 2: Blank-fill ──────────────────────────────────────────
+
+def test_merge_blank_fill_fills_empty_fields(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": [""],
+            "categories": [[]],
+            "tags": [[]],
+        }
+    )
+    db.write(initial_df, db_path)
+    fill_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["added in second import"],
+            "categories": [["nebula mapping"]],
+            "tags": [["tag1"]],
+        }
+    )
+    db.write(fill_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute(
+            "SELECT notes, categories, tags FROM activities WHERE activity = 'StellarCartography'"
+        )
+        row = cur.fetchone()
+        assert row is not None
+        assert row[0] == "added in second import"
+        loaded = json.loads(row[1])
+        assert loaded == ["nebula mapping"]
+        loaded_tags = json.loads(row[2])
+        assert loaded_tags == ["tag1"]
+    finally:
+        conn.close()
+
+
+def test_merge_blank_fill_no_overwrite_existing(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["existing note"],
+            "categories": [["existing"]],
+            "tags": [[]],
+        }
+    )
+    db.write(initial_df, db_path)
+    fill_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["existing note"],
+            "categories": [["existing"]],
+            "tags": [[]],
+        }
+    )
+    db.write(fill_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute(
+            "SELECT notes, categories FROM activities WHERE activity = 'StellarCartography'"
+        )
+        row = cur.fetchone()
+        assert row is not None
+        assert row[0] == "existing note"
+        assert json.loads(row[1]) == ["existing"]
+    finally:
+        conn.close()
+
+
+# ── Merge Rule 3: Conflict ────────────────────────────────────────────
+
+def test_merge_conflict_raises_error(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["original"],
+            "categories": [[]],
+            "tags": [[]],
+        }
+    )
+    db.write(initial_df, db_path)
+    conflict_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["updated note"],
+            "categories": [[]],
+            "tags": [[]],
+        }
+    )
+    with pytest.raises(MergeConflictError, match="Merge conflict detected"):
+        db.write(conflict_df, db_path)
+
+
+def test_merge_conflict_returns_old_row_in_error(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["original"],
+            "categories": [["cat1"]],
+            "tags": [[]],
+        }
+    )
+    db.write(initial_df, db_path)
+    conflict_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["updated"],
+            "categories": [[]],
+            "tags": [[]],
+        }
+    )
+    with pytest.raises(MergeConflictError) as exc_info:
+        db.write(conflict_df, db_path)
+    assert len(exc_info.value.conflicts) == 1
+    assert exc_info.value.conflicts[0]["notes"] == "original"
+    assert exc_info.value.conflicts[0]["activity"] == "StellarCartography"
+
+
+def test_merge_conflict_lists_only_unique_conflicts(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    df = pd.DataFrame(
+        {
+            "date": ["1/15/2200", "1/16/2200"],
+            "activity": ["StellarCartography", "StellarCartography"],
+            "start_time": pd.to_datetime(
+                ["2200-01-15 09:00:00+00:00", "2200-01-16 09:00:00+00:00"]
+            ),
+            "end_time": pd.to_datetime(
+                ["2200-01-15 11:30:00+00:00", "2200-01-16 11:30:00+00:00"]
+            ),
+            "hours": [2.5, 2.5],
+            "notes": ["original", "original"],
+            "categories": [["cat1"], ["cat1"]],
+            "tags": [["tag1"], ["tag1"]],
+        }
+    )
+    db.write(df, db_path)
+    conflict_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200", "1/16/2200"],
+            "activity": ["StellarCartography", "StellarCartography"],
+            "start_time": pd.to_datetime(
+                ["2200-01-15 09:00:00+00:00", "2200-01-16 09:00:00+00:00"]
+            ),
+            "end_time": pd.to_datetime(
+                ["2200-01-15 11:30:00+00:00", "2200-01-16 11:30:00+00:00"]
+            ),
+            "hours": [2.5, 2.5],
+            "notes": ["updated", "updated"],
+            "categories": [["cat1"], ["cat1"]],
+            "tags": [["tag1"], ["tag1"]],
+        }
+    )
+    with pytest.raises(MergeConflictError) as exc_info:
+        db.write(conflict_df, db_path)
+    assert len(exc_info.value.conflicts) == 2
+
+
+def test_merge_conflict_limits_displayed_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    rows = [
+    db = Database()
+        {
+            "date": f"1/{1+i}/2200",
+            "activity": "StellarCartography",
+            "start_time": pd.Timestamp(
+                f"2200-01-{1+i:02d} 09:00:00+00:00"
+            ),
+            "end_time": pd.Timestamp(
+                f"2200-01-{1+i:02d} 11:30:00+00:00"
+            ),
+            "hours": 2.5,
+            "notes": "orig",
+            "categories": [[f"cat{i}"]],
+            "tags": [[]],
+        }
+        for i in range(15)
+    ]
+    big_df = pd.DataFrame(rows)
+    db.write(big_df, db_path)
+    conflict_df = big_df.copy()
+    conflict_df["notes"] = "updated"
+    with pytest.raises(MergeConflictError) as exc_info:
+        db.write(conflict_df, db_path)
+    msg = str(exc_info.value)
+    assert "15 entr" in msg
+
+
+def test_merge_conflict_emits_all_details_when_max_zero(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["original"],
+            "categories": [[]],
+            "tags": [[]],
+        }
+    )
+    db.write(initial_df, db_path, max_conflict_display=0)
+    conflict_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["updated"],
+            "categories": [[]],
+            "tags": [[]],
+        }
+    )
+    with pytest.raises(MergeConflictError) as exc_info:
+        db.write(conflict_df, db_path)
+    msg = str(exc_info.value)
+    assert "1 entry" in msg
+    assert "entr" in msg
+
+
+def test_merge_conflict_does_not_modify_existing_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    initial_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["original"],
+            "categories": [["cat1"]],
+            "tags": [["tag1"]],
+        }
+    )
+    db.write(initial_df, db_path)
+    conflict_df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 11:30:00+00:00"]),
+            "hours": [2.5],
+            "notes": ["updated"],
+            "categories": [["cat2"]],
+            "tags": [["tag2"]],
+        }
+    )
+    with pytest.raises(MergeConflictError):
+        db.write(conflict_df, db_path)
+    db.entries = db.read(db_path)
+    assert len(db.entries) == 1
+    row = db.entries.iloc[0]
+    assert row["notes"] == "original"
+    assert row["categories"] == ["cat1"]
+    assert row["tags"] == ["tag1"]
+
+
+def test_merge_with_empty_dataframe_does_not_change_existing(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    empty_df = pd.DataFrame(
+        {
+            "date": pd.Series([], dtype="str"),
+            "activity": pd.Series([], dtype="str"),
+            "start_time": pd.DatetimeIndex([], tz="UTC"),
+            "end_time": pd.DatetimeIndex([], tz="UTC"),
+            "hours": pd.Series([], dtype="float"),
+            "notes": pd.Series([], dtype="str"),
+            "categories": pd.Series([], dtype="object"),
+            "tags": pd.Series([], dtype="object"),
+        }
+    )
+    db.write(empty_df, db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM activities")
+        count = cur.fetchone()[0]
+        assert count == 2  # original rows preserved
+    finally:
+        conn.close()
+
+
+# ── Read ──────────────────────────────────────────────────────────────
+
+def test_database_read_empty_db(tmp_path: Path) -> None:
+    db_path = tmp_path / "missing.db"
+    db = Database()
+    result = db.read(db_path)
+    assert result.empty
+    assert db.entries.empty
+
+
+def test_database_read_returns_all_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    result = db.read(db_path)
+    assert len(result) == 2
+    assert result.iloc[0]["activity"] == "StellarCartography"
+    assert result.iloc[1]["activity"] == "Hydroponics"
+
+
+def test_database_entries_property_after_write(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    assert len(db.entries) == 2
+    assert db.entries.iloc[0]["activity"] == "StellarCartography"
+
+
+# ── _normalise_dataframe helpers ─────────────────────────────────────
+
+def test_database_normalise_adds_missing_columns() -> None:
+    df = pd.DataFrame({"activity": ["X"], "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"])})
+    out = Database._normalise_dataframe(df)
+    assert list(out.columns) == [
+        "date", "activity", "start_time", "end_time", "notes",
+        "categories", "tags",
+    ]
+    assert out.iloc[0]["date"] == ""
+    assert out.iloc[0]["end_time"] is None
+    assert out.iloc[0]["categories"] == []
+
+
+def test_database_normalise_leaves_full_dataframe_untouched(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    db = Database()
+    db.write(SAMPLE_DF, db_path)
+    df_in = pd.DataFrame(
+        {
+            "date": ["1/20/2200"],
+            "activity": ["WarpDrive"],
+            "start_time": pd.to_datetime(["2200-01-20 09:30:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-20 13:30:00+00:00"]),
+            "hours": [4.0],
+            "notes": ["coil winding"],
+            "categories": [["warp"]],
+            "tags": [[]],
+        }
+    )
+    out = Database._normalise_dataframe(df_in)
+    assert out.iloc[0]["activity"] == "WarpDrive"
+    assert out.iloc[0]["categories"] == ["warp"]
+
+
+def test_database_normalise_missing_endtime_column() -> None:
+    df = pd.DataFrame(
+        {
+            "activity": ["X"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+        }
+    )
+    out = Database._normalise_dataframe(df)
+    assert "end_time" in out.columns
+    assert out.iloc[0]["end_time"] is None
+
+
+def test_database_read_from_timecop_applies_tags_from_csv(tmp_path: Path) -> None:
+    """Test that tags read back from DB are deserialised into Python lists."""
+    db_path = tmp_path / "test.db"
+    df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["WarpDrive"],
+            "start_time": pd.to_datetime(["2200-01-15 09:00:00+00:00"]),
+            "end_time": pd.to_datetime(["2200-01-15 12:00:00+00:00"]),
+            "hours": [3.0],
+            "notes": ["plasma calibration"],
+            "categories": [["foo"]],
+            "tags": [["urgent", "review"]],
+        }
+    )
+    db = Database()
+    db.write(df, db_path)
+    result = db.read(db_path)
+    assert len(result) == 1
+    categories = result.iloc[0]["categories"]
+    tags = result.iloc[0]["tags"]
+    assert isinstance(categories, list)
+    assert categories == ["foo"]
+    assert isinstance(tags, list)
+    assert tags == ["urgent", "review"]
