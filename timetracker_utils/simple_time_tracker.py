@@ -44,7 +44,7 @@ class SimpleTimeEntry(BaseTimeEntry):
         description="Duration in minutes (validation cross-check only)",
     )
 
-    model_config: ClassVar[dict[str, Any]] = {
+    model_config = {  # noqa: RUF012
         "populate_by_name": True,
         "extra": "ignore",
     }

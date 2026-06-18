@@ -38,7 +38,7 @@ class TimeEntry(BaseTimeEntry):
         description="Pre-computed combined column; ignored at runtime",
     )
 
-    model_config: ClassVar[dict[str, str]] = {
+    model_config = {  # noqa: RUF012
         "populate_by_name": True,
         "extra": "ignore",
     }
