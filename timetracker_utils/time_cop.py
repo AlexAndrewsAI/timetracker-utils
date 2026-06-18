@@ -9,7 +9,9 @@ from __future__ import annotations
 import csv
 import io
 import logging
+from typing import ClassVar, cast
 
+import pandas as pd
 from pydantic import Field
 
 from timetracker_utils.base_tracker import BaseTimeEntry, BaseTimeTracker
@@ -36,7 +38,10 @@ class TimeEntry(BaseTimeEntry):
         description="Pre-computed combined column; ignored at runtime",
     )
 
-    model_config = {"populate_by_name": True, "extra": "ignore"}
+    model_config: ClassVar[dict[str, str]] = {
+        "populate_by_name": True,
+        "extra": "ignore",
+    }
 
 
 class TimeCop(BaseTimeTracker):
@@ -46,23 +51,21 @@ class TimeCop(BaseTimeTracker):
     _GROUPBY_FIELD = "project"
     # "End Time" is optional because the base validator can derive it from
     # the provided "Time (hours)" column.  Requiring it would prevent the
-    # back‑fill behaviour exercised in the test suite.
-    _REQUIRED_COLUMNS = {
+    # back-fill behaviour exercised in the test suite.
+    _REQUIRED_COLUMNS: ClassVar[set[str]] = {
         "Start Time",
         "Time (hours)",
     }
 
-    def read_csv_string(self, csv_data: str) -> "pd.DataFrame":
+    def read_csv_string(self, csv_data: str) -> pd.DataFrame:
+        """Read and validate TimeCop CSV string."""
         cleaned = csv_data.lstrip("\ufeff")
         reader = csv.DictReader(io.StringIO(cleaned))
         if reader.fieldnames is not None:
             field_names = set(reader.fieldnames)
             missing = self._REQUIRED_COLUMNS - field_names
             if missing:
-                msg = (
-                    "Missing required TimeCop columns: "
-                    f"{', '.join(sorted(missing))}"
-                )
+                msg = f"Missing required TimeCop columns: {', '.join(sorted(missing))}"
                 raise ValueError(msg)
         return super().read_csv_string(csv_data)
 
@@ -75,15 +78,14 @@ class TimeCop(BaseTimeTracker):
                     lambda x: [str(x)] if str(x).strip() else []
                 )
 
-    def entries_by_project(self, project: str) -> "pd.DataFrame":
-        import pandas as pd
-
+    def entries_by_project(self, project: str) -> pd.DataFrame:
+        """Filter entries by project name."""
         if self.entries.empty:
             return pd.DataFrame()
-        return self.entries[self.entries["project"] == project]
+        return cast(pd.DataFrame, self.entries[self.entries["project"] == project])
 
     def total_hours_by_project(self) -> dict[str, float]:
-
+        """Total hours grouped by project name."""
         if self.entries.empty:
             return {}
         grouped = self.entries.groupby("project")["hours"].sum()

@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def version_callback(value: bool) -> None:
+    """Print version and exit when --version flag is passed."""
     if value:
         typer.echo(f"timetracker-utils version: {__version__}")
         raise typer.Exit()
@@ -129,10 +130,7 @@ def _format_simple_csv(
             else:
                 categories_str = str(categories)
             tags = row.get("tags", [])
-            if isinstance(tags, list):
-                tags_str = ", ".join(tags)
-            else:
-                tags_str = str(tags)
+            tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
             start_str = _format_simple_datetime(start_time, timezone)
             end_str = _format_simple_datetime(end_time, timezone)
             duration_str, duration_min_str = _compute_simple_duration(
@@ -267,6 +265,7 @@ def timecop(
         None, "--output", "-o", help="Path to export database as TimeCop CSV."
     ),
 ) -> None:
+    """Load, display, and export TimeCop CSV data."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(config)
 
@@ -275,9 +274,9 @@ def timecop(
             cop = TimeCop()
             cop.read_csv(input)
         except ValueError as exc:
-            # Emit a clear error message for the user and exit with non‑zero code.
+            # Emit a clear error message for the user and exit with non-zero code.
             typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from exc
         db = Database()
         db.write(
             cop.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
@@ -333,6 +332,7 @@ def stt(
         None, "--output", "-o", help="Path to export database as STT-format CSV."
     ),
 ) -> None:
+    """Load, display, and export SimpleTimeTracker CSV data."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(config)
 
@@ -342,7 +342,7 @@ def stt(
             tracker.read_csv(input)
         except ValueError as exc:
             typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from exc
         db = Database()
         db.write(
             tracker.entries, cfg.database, max_conflict_display=cfg.max_conflict_display

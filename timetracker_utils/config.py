@@ -50,10 +50,13 @@ class TimeTrackerConfig(BaseModel):
             value: The raw database path string from the config file.
 
         Returns:
-            The path string with ``~`` expanded, if present.
+            The path string with ``~`` expanded, if present. Otherwise returns the
+            original string unchanged.
 
         """
-        return str(Path(value).expanduser())
+        if value.startswith("~"):
+            return str(Path(value).expanduser())
+        return value
 
 
 def load_config(config_path: Path) -> TimeTrackerConfig:

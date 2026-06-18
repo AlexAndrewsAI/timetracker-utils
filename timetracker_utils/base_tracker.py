@@ -73,6 +73,7 @@ class BaseTimeEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_date_from_start_time(self) -> "BaseTimeEntry":
+        """Validate and set the date from the start_time if not already set."""
         if not self.date and self.start_time:
             self.date = (
                 f"{self.start_time.month}/{self.start_time.day}/{self.start_time.year}"
@@ -91,6 +92,7 @@ class BaseTimeEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_end_time_and_hours(self) -> "BaseTimeEntry":
+        """Validate and populate end_time and hours fields consistently."""
         if self.end_time is None and self.hours is None:
             msg = "At least one of end_time or hours must be provided"
             raise ValueError(msg)
@@ -113,6 +115,7 @@ class BaseTimeEntry(BaseModel):
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
     def parse_datetime(cls, value: str | None) -> datetime | None:
+        """Parse a datetime string or return None for empty values."""
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
@@ -131,6 +134,7 @@ class BaseTimeEntry(BaseModel):
     @field_validator("date", "activity", "notes", mode="before")
     @classmethod
     def coerce_none_to_empty_string(cls, value: str | None) -> str:
+        """Coerce None values to an empty string."""
         if value is None:
             return ""
         return value
@@ -138,6 +142,7 @@ class BaseTimeEntry(BaseModel):
     @field_validator("categories", "tags", mode="before")
     @classmethod
     def parse_list_fields(cls, value: Any) -> list[str]:
+        """Parse comma-separated string or list into a list of strings."""
         if value is None or value == "":
             return []
         if isinstance(value, list):
@@ -150,6 +155,7 @@ class BaseTimeEntry(BaseModel):
     @field_validator("hours", mode="before")
     @classmethod
     def validate_hours(cls, value: str | float | None) -> float | None:
+        """Validate and round hours; reject negatives and values over 24."""
         if value is None or value == "":
             return None
         if isinstance(value, str):
@@ -168,17 +174,20 @@ class BaseTimeEntry(BaseModel):
     # the method below is kept for TimeCop backward-compat and is named
     # distinctly to avoid Pydantic shadow warnings.
     def duration_minutes_calculated(self) -> float | None:
+        """Calculate duration in minutes from start_time and end_time."""
         seconds = self.duration_seconds()
         if seconds is None:
             return None
         return seconds / 60.0
 
     def duration_seconds(self) -> float | None:
+        """Calculate duration in seconds from start_time to end_time."""
         if self.start_time is None or self.end_time is None:
             return None
         return (self.end_time - self.start_time).total_seconds()
 
     def duration_minutes(self) -> float | None:
+        """Calculate duration in minutes from start_time and end_time."""
         seconds = self.duration_seconds()
         if seconds is None:
             return None
@@ -192,9 +201,11 @@ class BaseTimeTracker:
     _GROUPBY_FIELD: ClassVar[str] = "activity"
 
     def __init__(self) -> None:
+        """Initialize the tracker with an empty DataFrame."""
         self.entries: pd.DataFrame = pd.DataFrame()
 
     def read_csv(self, path: str | Path) -> pd.DataFrame:
+        """Read a CSV file and return a DataFrame of parsed time entries."""
         filepath = Path(path)
         if not filepath.exists():
             msg = f"CSV file not found: {filepath}"
@@ -204,6 +215,7 @@ class BaseTimeTracker:
         return self.read_csv_string(content)
 
     def read_csv_string(self, csv_data: str) -> pd.DataFrame:
+        """Parse a CSV string and return a DataFrame of validated time entries."""
         cleaned = csv_data.lstrip("\ufeff")
         reader = csv.DictReader(io.StringIO(cleaned))
         if reader.fieldnames is not None:
@@ -217,7 +229,7 @@ class BaseTimeTracker:
                     field_info.validation_alias, "choices"
                 ):
                     for alias in field_info.validation_alias.choices:
-                        known_fields.add(alias)
+                        known_fields.add(str(alias))
             extra_cols = set(reader.fieldnames) - known_fields
             if extra_cols:
                 logger.warning(
@@ -236,14 +248,16 @@ class BaseTimeTracker:
         return self.entries
 
     def _post_process_entries(self) -> None:
-        """Hook for subclasses to remap columns after build."""
+        """Remap columns after build as needed by subclasses."""
 
     def total_hours(self) -> float:
+        """Return the total hours summed across all entries."""
         if self.entries.empty:
             return 0.0
         return round(float(self.entries["hours"].sum()), 4)
 
     def total_hours_by_activity(self) -> dict[str, float]:
+        """Return total hours grouped by activity."""
         if self.entries.empty:
             return {}
         group_field = self._GROUPBY_FIELD
@@ -251,12 +265,14 @@ class BaseTimeTracker:
         return {str(name): round(float(total), 4) for name, total in grouped.items()}
 
     def entries_by_activity(self, activity: str) -> pd.DataFrame:
+        """Return entries filtered by the given activity name."""
         if self.entries.empty:
             return pd.DataFrame()
         group_field = self._GROUPBY_FIELD
-        return self.entries[self.entries[group_field] == activity]
+        return self.entries[self.entries[group_field] == activity]  # type: ignore[no-any-return]
 
     def entries_by_date(self, date: str) -> pd.DataFrame:
+        """Return entries filtered by the given date string."""
         if self.entries.empty:
             return pd.DataFrame()
-        return self.entries[self.entries["date"] == date]
+        return self.entries[self.entries["date"] == date]  # type: ignore[no-any-return]

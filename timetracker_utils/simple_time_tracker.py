@@ -8,7 +8,7 @@ import csv
 import io
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar, cast
 
 import pandas as pd
 from pydantic import Field, field_validator, model_validator
@@ -38,17 +38,21 @@ class SimpleTimeEntry(BaseTimeEntry):
         alias="duration",
         description="Raw H:M:S duration string (validation only)",
     )
-    duration_minutes: int | None = Field(
+    duration_minutes: int | None = Field(  # type: ignore[assignment]
         default=None,
         alias="duration minutes",
         description="Duration in minutes (validation cross-check only)",
     )
 
-    model_config = {"populate_by_name": True, "extra": "ignore"}
+    model_config: ClassVar[dict[str, Any]] = {
+        "populate_by_name": True,
+        "extra": "ignore",
+    }
 
     @field_validator("duration_minutes", mode="before")
     @classmethod
     def coerce_duration_minutes(cls, value: Any) -> int | None:
+        """Coerce duration_minutes to int from various types."""
         if value is None or value == "":
             return None
         if isinstance(value, str):
@@ -65,6 +69,7 @@ class SimpleTimeEntry(BaseTimeEntry):
     @field_validator("duration_str", mode="before")
     @classmethod
     def parse_duration_hms(cls, value: Any) -> str:
+        """Parse and clean duration string from CSV."""
         if value is None:
             return ""
         val = str(value).strip()
@@ -75,6 +80,7 @@ class SimpleTimeEntry(BaseTimeEntry):
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
     def parse_datetime(cls, value: str | None) -> datetime | None:
+        """Parse datetime from string or return existing datetime."""
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
@@ -93,13 +99,17 @@ class SimpleTimeEntry(BaseTimeEntry):
 
     @model_validator(mode="after")
     def validate_duration_crosscheck(self) -> "SimpleTimeEntry":
+        """Validate that duration_str and duration_minutes are consistent."""
         dur_str = self.duration_str
         dur_min = self.duration_minutes
         if not dur_str and dur_min is None:
             return self
         parsed_minutes = self._parse_hms_to_minutes(dur_str)
-        if parsed_minutes is not None and dur_min is not None:
-            if abs(parsed_minutes - dur_min) > 1.0:
+        if (
+            parsed_minutes is not None
+            and dur_min is not None
+            and abs(parsed_minutes - dur_min) > 1.0
+        ):
                 msg = (
                     f"Parsed duration {parsed_minutes:.1f} min does not match "
                     f"duration minutes {dur_min} (tolerance: 1 min)"
@@ -132,7 +142,7 @@ class SimpleTimeTracker(BaseTimeTracker):
 
     _ENTRY_CLASS = SimpleTimeEntry
     _GROUPBY_FIELD = "activity"
-    _REQUIRED_COLUMNS = {
+    _REQUIRED_COLUMNS: ClassVar[set[str]] = {
         "activity name",
         "time started",
         "time ended",
@@ -147,26 +157,22 @@ class SimpleTimeTracker(BaseTimeTracker):
             )
 
     def read_csv_string(self, csv_data: str) -> pd.DataFrame:
+        """Read and validate Simple Time Tracker CSV string."""
         cleaned = csv_data.lstrip("\ufeff")
         reader = csv.DictReader(io.StringIO(cleaned))
         if reader.fieldnames is not None:
             field_names = set(reader.fieldnames)
             missing = self._REQUIRED_COLUMNS - field_names
             if missing:
-                msg = (
-                    "Missing required STT columns: "
-                    f"{', '.join(sorted(missing))}"
-                )
+                msg = f"Missing required STT columns: {', '.join(sorted(missing))}"
                 raise ValueError(msg)
         return super().read_csv_string(csv_data)
 
-    def entries_by_activity(self, activity: str) -> "pd.DataFrame":
+    def entries_by_activity(self, activity: str) -> pd.DataFrame:
         """Filter entries by activity name."""
-        import pandas as pd
-
         if self.entries.empty:
             return pd.DataFrame()
-        return self.entries[self.entries["activity"] == activity]
+        return cast(pd.DataFrame, self.entries[self.entries["activity"] == activity])
 
     def total_hours_by_activity(self) -> dict[str, float]:
         """Total hours grouped by activity name."""

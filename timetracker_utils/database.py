@@ -1,3 +1,9 @@
+"""Database module for persistent activity entry storage.
+
+Provides ActivityEntry model and Database class for SQLite persistence
+with merge conflict detection and resolution.
+"""
+
 import json
 import logging
 import sqlite3
@@ -6,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +37,35 @@ class ActivityEntry(BaseModel):
     tags: list[str] = Field(default_factory=list, description="List of tag strings")
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def parse_datetime(cls, value: Any) -> datetime | None:
+        """Parse datetime from string or return existing datetime."""
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                msg = f"Invalid datetime value: {value!r}"
+                raise ValueError(msg) from exc
+        msg = f"Invalid datetime type: {type(value).__name__}"
+        raise TypeError(msg)
+
 
 class MergeConflictError(Exception):
     """Raised when a merge conflict is detected during database write."""
 
     def __init__(self, message: str, conflicts: list[dict[str, Any]]) -> None:
+        """Initialize MergeConflictError with message and conflict details.
+
+        Args:
+            message: Error message describing the conflict.
+            conflicts: List of dictionaries containing conflicting row data.
+
+        """
         super().__init__(message)
         self.conflicts = conflicts
 
@@ -92,6 +122,7 @@ class Database:
     """Handles persistence of activity entries to a SQLite database."""
 
     def __init__(self) -> None:
+        """Initialize Database with empty entries DataFrame."""
         self.entries: pd.DataFrame = pd.DataFrame()
 
     def write(
@@ -100,6 +131,14 @@ class Database:
         db_path: str | Path,
         max_conflict_display: int = 100,
     ) -> None:
+        """Write DataFrame to SQLite database with merge conflict detection.
+
+        Args:
+            df: DataFrame of activity entries to write.
+            db_path: Path to SQLite database file.
+            max_conflict_display: Maximum number of conflicts to display in error.
+
+        """
         db = Path(db_path)
         db.parent.mkdir(parents=True, exist_ok=True)
         cols_to_drop = _DROP_COLUMNS & set(df.columns)
@@ -153,6 +192,15 @@ class Database:
             conn.close()
 
     def read(self, db_path: str | Path) -> pd.DataFrame:
+        """Read activity entries from SQLite database.
+
+        Args:
+            db_path: Path to SQLite database file.
+
+        Returns:
+            DataFrame of activity entries, or empty DataFrame if file doesn't exist.
+
+        """
         db = Path(db_path)
         if not db.exists():
             logger.info("Database %s does not exist, returning empty DataFrame", db)

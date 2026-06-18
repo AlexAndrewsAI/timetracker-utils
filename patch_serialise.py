@@ -1,17 +1,25 @@
+"""Patch script to fix _serialise_lists in database.py.
+
+This script updates the _serialise_lists function to convert empty lists
+to empty strings instead of "[]".
+"""
+
 from pathlib import Path
 
 # Fix _serialise_lists: empty lists -> "" not "[]"
 p = Path("/root/timetracker-utils/timetracker_utils/database.py")
 src = p.read_text()
 old = """            df[col] = df[col].apply(
-                lambda x: json.dumps(x) if isinstance(x, list) else ("" if _is_blank(x) else str(x))
+                lambda x: json.dumps(x) if isinstance(x, list)
+                else ("" if _is_blank(x) else str(x))
             )
         return df
 
 
 def _deserialise_lists"""
 new = """            df[col] = df[col].apply(
-                lambda x: json.dumps(x) if isinstance(x, list) and len(x) > 0 else ("" if _is_blank(x) else str(x))
+                lambda x: json.dumps(x) if isinstance(x, list) and len(x) > 0
+                else ("" if _is_blank(x) else str(x))
             )
         return df
 
