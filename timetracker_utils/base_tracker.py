@@ -115,7 +115,12 @@ class BaseTimeEntry(BaseModel):
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
     def parse_datetime(cls, value: str | None) -> datetime | None:
-        """Parse a datetime string or return None for empty values."""
+        """Parse a datetime string or return None for empty values.
+
+        Timezone policy: Naive datetime objects are treated as UTC by adding
+        timezone.utc. Timezone-aware datetimes are converted to UTC. This ensures
+        consistent UTC representation in the database and merge operations.
+        """
         if value is None or value == "":
             return None
         if isinstance(value, datetime):

@@ -80,7 +80,14 @@ class SimpleTimeEntry(BaseTimeEntry):
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
     def parse_datetime(cls, value: str | None) -> datetime | None:
-        """Parse datetime from string or return existing datetime."""
+        """Parse datetime from string or return existing datetime.
+
+        Timezone policy: For Simple Time Tracker format, if no explicit timezone
+        is specified in the input string, the datetime is kept as naive (treated
+        as local/config timezone). If an explicit timezone is present (e.g., 'Z',
+        '+00:00', or offset), it is preserved. This differs from BaseTimeEntry
+        which normalizes all datetimes to UTC.
+        """
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
@@ -110,11 +117,11 @@ class SimpleTimeEntry(BaseTimeEntry):
             and dur_min is not None
             and abs(parsed_minutes - dur_min) > 1.0
         ):
-                msg = (
-                    f"Parsed duration {parsed_minutes:.1f} min does not match "
-                    f"duration minutes {dur_min} (tolerance: 1 min)"
-                )
-                raise ValueError(msg)
+            msg = (
+                f"Parsed duration {parsed_minutes:.1f} min does not match "
+                f"duration minutes {dur_min} (tolerance: 1 min)"
+            )
+            raise ValueError(msg)
         return self
 
     @staticmethod

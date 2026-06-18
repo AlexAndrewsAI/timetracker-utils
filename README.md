@@ -36,6 +36,13 @@ uv sync --dev
 
 ## Usage
 
+### Example Files
+
+The `tests/` directory includes example CSV files for both supported formats:
+
+- `example_timecop.csv` - TimeCop format sample data
+- `example_simpletimetracker.csv` - Simple Time Tracker format sample data
+
 ### Configuration
 
 Create a YAML configuration file pointing to your SQLite database:
@@ -48,23 +55,41 @@ max_conflict_display: 100
 
 ### CLI
 
-The package provides a `timetracker` CLI with a single command `timecop`:
+The package provides a `timetracker` CLI with commands for both supported formats:
+
+#### TimeCop Format
 
 ```bash
 # Show version
 uv run timetracker --version
 
-# Import a CSV file and display entries
-uv run timetracker timecop --config config.yml --input timecop_export.csv
+# Import a TimeCop CSV file and display entries
+uv run timetracker timecop --config tests/timetracker.yml --input tests/example_timecop.csv
 
-# Export the database back to CSV
-uv run timetracker timecop --config config.yml --output timecop_export.csv
+# Export the database back to TimeCop CSV
+uv run timetracker timecop --config tests/timetracker.yml --output timecop_export.csv
 
 # Both import and export in one command
-uv run timetracker timecop --config config.yml --input input.csv --output output.csv
+uv run timetracker timecop --config tests/timetracker.yml --input tests/example_timecop.csv --output output.csv
 
 # Control how many rows to display
-uv run timetracker timecop --config config.yml --input input.csv --head 10
+uv run timetracker timecop --config tests/timetracker.yml --input tests/example_timecop.csv --head 5
+```
+
+#### Simple Time Tracker Format
+
+```bash
+# Import a Simple Time Tracker CSV file and display entries
+uv run timetracker stt --config tests/timetracker.yml --input tests/example_simpletimetracker.csv
+
+# Export the database back to Simple Time Tracker CSV
+uv run timetracker stt --config tests/timetracker.yml --output stt_export.csv
+
+# Both import and export in one command
+uv run timetracker stt --config tests/timetracker.yml --input tests/example_simpletimetracker.csv --output output.csv
+
+# Control how many rows to display
+uv run timetracker stt --config tests/timetracker.yml --input tests/example_simpletimetracker.csv --head 5
 ```
 
 ### Python API

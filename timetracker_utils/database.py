@@ -95,11 +95,20 @@ def _deserialise_lists(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = df[col].apply(
                 lambda x: (
                     json.loads(x)
-                    if isinstance(x, str) and x.startswith("[")
+                    if isinstance(x, str) and not _is_blank(x) and _try_json_loads(x)
                     else ([] if _is_blank(x) else [str(x)])
                 )
             )
     return df
+
+
+def _try_json_loads(value: str) -> bool:
+    """Safely test if a string can be parsed as JSON."""
+    try:
+        json.loads(value)
+        return True
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return False
 
 
 def _format_row_for_display(row: dict[str, Any]) -> str:
@@ -262,6 +271,11 @@ class Database:
     def _rows_identical(
         row_a: pd.Series, row_b: pd.Series, include_key: bool = True
     ) -> bool:
+        """Check if two rows are identical for merge purposes.
+
+        Note: This operates on serialized data where categories/tags are JSON strings,
+        ensuring consistent comparison regardless of original list ordering or format.
+        """
         cols = _MERGEABLE_COLUMNS + (_MERGE_KEY_COLUMNS if include_key else [])
         for col in cols:
             val_a = row_a.get(col)
