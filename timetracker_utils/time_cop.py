@@ -44,9 +44,11 @@ class TimeCop(BaseTimeTracker):
 
     _ENTRY_CLASS = TimeEntry
     _GROUPBY_FIELD = "project"
+    # "End Time" is optional because the base validator can derive it from
+    # the provided "Time (hours)" column.  Requiring it would prevent the
+    # back‑fill behaviour exercised in the test suite.
     _REQUIRED_COLUMNS = {
         "Start Time",
-        "End Time",
         "Time (hours)",
     }
 

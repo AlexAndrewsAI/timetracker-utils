@@ -271,8 +271,13 @@ def timecop(
     cfg = load_config(config)
 
     if input is not None:
-        cop = TimeCop()
-        cop.read_csv(input)
+        try:
+            cop = TimeCop()
+            cop.read_csv(input)
+        except ValueError as exc:
+            # Emit a clear error message for the user and exit with non‑zero code.
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1)
         db = Database()
         db.write(
             cop.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
@@ -332,8 +337,12 @@ def stt(
     cfg = load_config(config)
 
     if input is not None:
-        tracker = SimpleTimeTracker()
-        tracker.read_csv(input)
+        try:
+            tracker = SimpleTimeTracker()
+            tracker.read_csv(input)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1)
         db = Database()
         db.write(
             tracker.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
