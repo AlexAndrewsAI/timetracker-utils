@@ -1,4 +1,6 @@
 REVIEW.md
+temp.*
+*.temp
 
 # General
 *.lock
