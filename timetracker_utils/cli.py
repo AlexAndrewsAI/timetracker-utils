@@ -14,7 +14,7 @@ import typer
 from timetracker_utils import __version__
 from timetracker_utils.config import load_config
 from timetracker_utils.database import Database
-from timetracker_utils.datetime_utils import convert_column_tz
+from timetracker_utils.datetime_utils import convert_column_tz, resolve_tz
 from timetracker_utils.simple_time_tracker import SimpleTimeTracker
 from timetracker_utils.time_cop import TimeCop
 
@@ -46,7 +46,9 @@ def main(
     _ = SimpleTimeTracker
 
 
-def _format_timecop_csv(entries: pd.DataFrame, output_path: Path) -> None:
+def _format_timecop_csv(
+    entries: pd.DataFrame, output_path: Path, timezone: str = "UTC"
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     header = [
         "Date",
@@ -77,8 +79,8 @@ def _format_timecop_csv(entries: pd.DataFrame, output_path: Path) -> None:
             start_time = row.get("start_time")
             end_time = row.get("end_time")
             notes = str(row.get("notes", ""))
-            start_str = _format_datetime_iso(start_time)
-            end_str = _format_datetime_iso(end_time)
+            start_str = _format_datetime_iso(start_time, timezone)
+            end_str = _format_datetime_iso(end_time, timezone)
             hours_str = _compute_hours(start_time, end_time)
             writer.writerow(
                 [
@@ -94,7 +96,9 @@ def _format_timecop_csv(entries: pd.DataFrame, output_path: Path) -> None:
             )
 
 
-def _format_simple_csv(entries: pd.DataFrame, output_path: Path) -> None:
+def _format_simple_csv(
+    entries: pd.DataFrame, output_path: Path, timezone: str = "UTC"
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     header = [
         "activity name",
@@ -129,8 +133,8 @@ def _format_simple_csv(entries: pd.DataFrame, output_path: Path) -> None:
                 tags_str = ", ".join(tags)
             else:
                 tags_str = str(tags)
-            start_str = _format_simple_datetime(start_time)
-            end_str = _format_simple_datetime(end_time)
+            start_str = _format_simple_datetime(start_time, timezone)
+            end_str = _format_simple_datetime(end_time, timezone)
             duration_str, duration_min_str = _compute_simple_duration(
                 start_time, end_time
             )
@@ -148,7 +152,7 @@ def _format_simple_csv(entries: pd.DataFrame, output_path: Path) -> None:
             )
 
 
-def _format_simple_datetime(val: object) -> str:
+def _format_simple_datetime(val: object, target_tz: str = "UTC") -> str:
     if val is None or (isinstance(val, str) and val.strip() == ""):
         return ""
     if isinstance(val, str):
@@ -162,8 +166,13 @@ def _format_simple_datetime(val: object) -> str:
         return str(val)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    dt = dt.astimezone(timezone.utc)
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
+    zone = resolve_tz(target_tz)
+    if zone is not None:
+        dt = dt.astimezone(zone)
+    base = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    millis = f"{dt.microsecond // 1000:03d}"
+    offset = dt.strftime("%:z")
+    return f"{base}.{millis}{offset}"
 
 
 def _compute_simple_duration(start_time: object, end_time: object) -> tuple[str, str]:
@@ -195,7 +204,7 @@ def _compute_simple_duration(start_time: object, end_time: object) -> tuple[str,
         return "", ""
 
 
-def _format_datetime_iso(val: object) -> str:
+def _format_datetime_iso(val: object, target_tz: str = "UTC") -> str:
     if val is None or (isinstance(val, str) and val.strip() == ""):
         return ""
     if isinstance(val, str):
@@ -209,9 +218,13 @@ def _format_datetime_iso(val: object) -> str:
         return str(val)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
+    zone = resolve_tz(target_tz)
+    if zone is not None:
+        dt = dt.astimezone(zone)
+    base = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    millis = f"{dt.microsecond // 1000:03d}"
+    offset = dt.strftime("%:z")
+    return f"{base}.{millis}{offset}"
 
 
 def _compute_hours(start_time: object, end_time: object) -> str:
@@ -292,7 +305,7 @@ def timecop(
             typer.echo("Database is empty, writing header-only CSV.")
         else:
             typer.echo(f"Exporting {len(db_entries)} entries to {output}")
-        _format_timecop_csv(db_entries, output)
+        _format_timecop_csv(db_entries, output, cfg.timezone)
 
     if input is None and output is None:
         typer.echo(
@@ -326,9 +339,16 @@ def stt(
             tracker.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
         )
         typer.echo(f"Loaded DataFrame ({len(tracker.entries)} rows total):")
-        # For STT format, naive timestamps are assumed to be in the config
-        # timezone already, so no timezone conversion is needed for display.
         display_df = tracker.entries.copy()
+        if not display_df.empty:
+            if "start_time" in display_df.columns:
+                display_df["start_time"] = convert_column_tz(
+                    display_df["start_time"], cfg.timezone
+                )
+            if "end_time" in display_df.columns:
+                display_df["end_time"] = convert_column_tz(
+                    display_df["end_time"], cfg.timezone
+                )
         with pd.option_context(
             "display.max_columns",
             None,
@@ -346,7 +366,7 @@ def stt(
             typer.echo("Database is empty, writing header-only CSV.")
         else:
             typer.echo(f"Exporting {len(db_entries)} entries to {output}")
-        _format_simple_csv(db_entries, output)
+        _format_simple_csv(db_entries, output, cfg.timezone)
 
     if input is None and output is None:
         typer.echo(

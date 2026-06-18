@@ -214,8 +214,8 @@ def test_timecop_output_with_data(tmp_path: Path) -> None:
     assert "StellarCartography" in content
     assert "nebula mapping" in content
     assert "StellarCartography: nebula mapping" in content
-    assert "2200-01-15T09:00:00.000Z" in content or "2200-01-15T09:00:00" in content
-    assert "2200-01-15T11:30:00.000Z" in content or "2200-01-15T11:30:00" in content
+    assert "2200-01-15T04:00:00.000-05:00" in content
+    assert "2200-01-15T06:30:00.000-05:00" in content
     assert "2.5000" in content
 
 
@@ -270,14 +270,14 @@ def test_format_datetime_iso() -> None:
     # Datetime object
     dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
     result = _format_datetime_iso(dt)
-    assert result == "2200-01-15T09:00:00.000Z"
+    assert result == "2200-01-15T09:00:00.000+00:00"
     # ISO string
     result = _format_datetime_iso("2200-01-15T09:00:00.000Z")
-    assert result == "2200-01-15T09:00:00.000Z"
-    # Non-UTC timezone
+    assert result == "2200-01-15T09:00:00.000+00:00"
+    # Non-UTC timezone defaults to UTC conversion
     dt_est = datetime(2200, 1, 15, 5, 0, 0, tzinfo=timezone(timedelta(hours=-5)))
     result = _format_datetime_iso(dt_est)
-    assert result == "2200-01-15T10:00:00.000Z"
+    assert result == "2200-01-15T10:00:00.000+00:00"
 
 
 def test_format_datetime_iso_unparseable_string() -> None:
@@ -297,8 +297,8 @@ def test_format_datetime_iso_naive_datetime() -> None:
 
     dt = datetime(2200, 1, 15, 9, 0, 0)  # No tzinfo
     result = _format_datetime_iso(dt)
-    # Should be treated as UTC
-    assert result == "2200-01-15T09:00:00.000Z"
+    # Should be treated as UTC and show offset
+    assert result == "2200-01-15T09:00:00.000+00:00"
 
 
 def test_format_datetime_iso_non_datetime_type() -> None:
