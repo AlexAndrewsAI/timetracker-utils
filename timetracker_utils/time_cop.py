@@ -4,15 +4,15 @@ Extends ``BaseTimeEntry`` and ``BaseTimeTracker`` to parse the
 TimeCop-format CSV export.
 """
 
+from __future__ import annotations
+
+import csv
+import io
 import logging
-from typing import TYPE_CHECKING
 
 from pydantic import Field
 
 from timetracker_utils.base_tracker import BaseTimeEntry, BaseTimeTracker
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,25 @@ class TimeCop(BaseTimeTracker):
 
     _ENTRY_CLASS = TimeEntry
     _GROUPBY_FIELD = "project"
+    _REQUIRED_COLUMNS = {
+        "Start Time",
+        "End Time",
+        "Time (hours)",
+    }
+
+    def read_csv_string(self, csv_data: str) -> "pd.DataFrame":
+        cleaned = csv_data.lstrip("\ufeff")
+        reader = csv.DictReader(io.StringIO(cleaned))
+        if reader.fieldnames is not None:
+            field_names = set(reader.fieldnames)
+            missing = self._REQUIRED_COLUMNS - field_names
+            if missing:
+                msg = (
+                    "Missing required TimeCop columns: "
+                    f"{', '.join(sorted(missing))}"
+                )
+                raise ValueError(msg)
+        return super().read_csv_string(csv_data)
 
     def _post_process_entries(self) -> None:
         if not self.entries.empty:

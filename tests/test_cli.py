@@ -245,6 +245,38 @@ def test_timecop_output_combined_with_input(tmp_path: Path) -> None:
     assert "StellarCartography" in content
 
 
+def test_stt_rejects_timecop_csv(tmp_path: Path) -> None:
+    """Test that the stt CLI command rejects a TimeCop-format CSV."""
+    timecop_csv = """\
+"Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
+"1/15/2200","StellarCartography","nebula mapping","StellarCartography: nebula mapping","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","2.5",""
+"""
+    csv_path = tmp_path / "timecop.csv"
+    csv_path.write_text(timecop_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code != 0
+    assert "Missing required STT columns" in (result.output or result.stderr or "")
+
+
+def test_timecop_rejects_stt_csv(tmp_path: Path) -> None:
+    """Test that the timecop CLI command rejects an STT-format CSV."""
+    stt_csv = """\
+"activity name","time started","time ended","comment","categories","record tags","duration","duration minutes"
+"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","nebula mapping","nebula mapping","","2:30:00","150"
+"""
+    csv_path = tmp_path / "stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code != 0
+    assert "Missing required TimeCop columns" in (result.output or result.stderr or "")
+
+
 def test_timecop_output_non_existent_db(tmp_path: Path) -> None:
     """Test --output when the database file does not exist yet."""
     config_path = _write_config(tmp_path, timezone="ET")

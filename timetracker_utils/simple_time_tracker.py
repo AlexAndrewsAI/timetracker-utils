@@ -4,6 +4,8 @@ Extends ``BaseTimeEntry`` and ``BaseTimeTracker`` to parse the
 Simple Time Tracker CSV export format.
 """
 
+import csv
+import io
 import logging
 from datetime import datetime
 from typing import Any
@@ -32,7 +34,7 @@ class SimpleTimeEntry(BaseTimeEntry):
         description="comma-delimited tag strings from the CSV",
     )
     duration_str: str = Field(
-        default="",
+        ...,
         alias="duration",
         description="Raw H:M:S duration string (validation only)",
     )
@@ -130,6 +132,12 @@ class SimpleTimeTracker(BaseTimeTracker):
 
     _ENTRY_CLASS = SimpleTimeEntry
     _GROUPBY_FIELD = "activity"
+    _REQUIRED_COLUMNS = {
+        "activity name",
+        "time started",
+        "time ended",
+        "duration",
+    }
 
     def _post_process_entries(self) -> None:
         if not self.entries.empty:
@@ -137,6 +145,20 @@ class SimpleTimeTracker(BaseTimeTracker):
                 columns=list(_VALIDATION_ONLY_COLS & set(self.entries.columns)),
                 errors="ignore",
             )
+
+    def read_csv_string(self, csv_data: str) -> pd.DataFrame:
+        cleaned = csv_data.lstrip("\ufeff")
+        reader = csv.DictReader(io.StringIO(cleaned))
+        if reader.fieldnames is not None:
+            field_names = set(reader.fieldnames)
+            missing = self._REQUIRED_COLUMNS - field_names
+            if missing:
+                msg = (
+                    "Missing required STT columns: "
+                    f"{', '.join(sorted(missing))}"
+                )
+                raise ValueError(msg)
+        return super().read_csv_string(csv_data)
 
     def entries_by_activity(self, activity: str) -> "pd.DataFrame":
         """Filter entries by activity name."""
