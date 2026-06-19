@@ -41,7 +41,7 @@ uv sync --dev
 The `tests/` directory includes example CSV files for both supported formats:
 
 - `example_timecop.csv` - TimeCop format sample data
-- `example_simpletimetracker.csv` - Simple Time Tracker format sample data
+- `example_stt.csv` - Simple Time Tracker format sample data
 
 ### Configuration
 
@@ -57,8 +57,6 @@ max_conflict_display: 100
 
 The package provides a `timetracker` CLI with commands for both supported formats:
 
-#### TimeCop Format
-
 ```bash
 # Show version
 uv run timetracker --version
@@ -69,27 +67,12 @@ uv run timetracker timecop --config tests/timetracker.yml --input tests/example_
 # Export the database back to TimeCop CSV
 uv run timetracker timecop --config tests/timetracker.yml --output timecop_export.csv
 
-# Both import and export in one command
-uv run timetracker timecop --config tests/timetracker.yml --input tests/example_timecop.csv --output output.csv
 
-# Control how many rows to display
-uv run timetracker timecop --config tests/timetracker.yml --input tests/example_timecop.csv --head 5
-```
-
-#### Simple Time Tracker Format
-
-```bash
 # Import a Simple Time Tracker CSV file and display entries
-uv run timetracker stt --config tests/timetracker.yml --input tests/example_simpletimetracker.csv
+uv run timetracker stt --config tests/timetracker.yml --input tests/example_stt.csv
 
 # Export the database back to Simple Time Tracker CSV
 uv run timetracker stt --config tests/timetracker.yml --output stt_export.csv
-
-# Both import and export in one command
-uv run timetracker stt --config tests/timetracker.yml --input tests/example_simpletimetracker.csv --output output.csv
-
-# Control how many rows to display
-uv run timetracker stt --config tests/timetracker.yml --input tests/example_simpletimetracker.csv --head 5
 ```
 
 ### Python API
