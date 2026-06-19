@@ -1,0 +1,13 @@
+activity name,time started,time ended,duration,categories,record tags,duration minutes
+StellarCartography,2200-01-15T09:00:00.000Z,2200-01-15T11:30:00.000Z,2:30:00,nebula mapping,,150
+Hydroponics,2200-01-15T13:00:00.000Z,2200-01-15T14:45:00.000Z,1:45:00,crop harvest,,105
+StellarCartography,2200-01-15T21:00:00.000Z,2200-01-15T22:30:00.000Z,1:30:00,,,90
+CrewFitness,2200-01-16T06:00:00.000Z,2200-01-16T07:00:00.000Z,1:00:00,strength training,,60
+Hydroponics,2200-01-16T10:15:00.000Z,2200-01-16T11:45:00.000Z,1:30:00,nutrient mix,,90
+StellarCartography,2200-01-16T20:30:00.000Z,2200-01-16T22:15:00.000Z,1:45:00,course plotting,,105
+WarpDrive,2200-01-17T08:00:00.000Z,2200-01-17T12:30:00.000Z,4:30:00,plasma calibration,critical test,270
+Hydroponics,2200-01-17T14:00:00.000Z,2200-01-17T15:30:00.000Z,1:30:00,pH adjustment,,90
+CrewFitness,2200-01-17T17:00:00.000Z,2200-01-17T18:30:00.000Z,1:30:00,cardiovascular,,90
+WarpDrive,2200-01-20T09:30:00.000Z,2200-01-20T13:30:00.000Z,4:00:00,coil winding,,240
+StellarCartography,2200-01-20T15:00:00.000Z,2200-01-20T16:45:00.000Z,1:45:00,asteroid tracking,,105
+CrewFitness,2200-01-20T19:00:00.000Z,2200-01-20T20:00:00.000Z,1:00:00,yoga session,test,60

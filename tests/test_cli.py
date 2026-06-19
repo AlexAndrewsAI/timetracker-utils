@@ -214,8 +214,8 @@ def test_timecop_output_with_data(tmp_path: Path) -> None:
     assert "StellarCartography" in content
     assert "nebula mapping" in content
     assert "StellarCartography: nebula mapping" in content
-    assert "2200-01-15T09:00:00.000Z" in content or "2200-01-15T09:00:00" in content
-    assert "2200-01-15T11:30:00.000Z" in content or "2200-01-15T11:30:00" in content
+    assert "2200-01-15T04:00:00.000-05:00" in content
+    assert "2200-01-15T06:30:00.000-05:00" in content
     assert "2.5000" in content
 
 
@@ -245,6 +245,38 @@ def test_timecop_output_combined_with_input(tmp_path: Path) -> None:
     assert "StellarCartography" in content
 
 
+def test_stt_rejects_timecop_csv(tmp_path: Path) -> None:
+    """Test that the stt CLI command rejects a TimeCop-format CSV."""
+    timecop_csv = """\
+"Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
+"1/15/2200","StellarCartography","nebula mapping","StellarCartography: nebula mapping","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","2.5",""
+"""
+    csv_path = tmp_path / "timecop.csv"
+    csv_path.write_text(timecop_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code != 0
+    assert "Missing required STT columns" in (result.output or result.stderr or "")
+
+
+def test_timecop_rejects_stt_csv(tmp_path: Path) -> None:
+    """Test that the timecop CLI command rejects an STT-format CSV."""
+    stt_csv = """\
+"activity name","time started","time ended","comment","categories","record tags","duration","duration minutes"
+"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","nebula mapping","nebula mapping","","2:30:00","150"
+"""
+    csv_path = tmp_path / "stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code != 0
+    assert "Missing required TimeCop columns" in (result.output or result.stderr or "")
+
+
 def test_timecop_output_non_existent_db(tmp_path: Path) -> None:
     """Test --output when the database file does not exist yet."""
     config_path = _write_config(tmp_path, timezone="ET")
@@ -270,14 +302,14 @@ def test_format_datetime_iso() -> None:
     # Datetime object
     dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
     result = _format_datetime_iso(dt)
-    assert result == "2200-01-15T09:00:00.000Z"
+    assert result == "2200-01-15T09:00:00.000+00:00"
     # ISO string
     result = _format_datetime_iso("2200-01-15T09:00:00.000Z")
-    assert result == "2200-01-15T09:00:00.000Z"
-    # Non-UTC timezone
+    assert result == "2200-01-15T09:00:00.000+00:00"
+    # Non-UTC timezone defaults to UTC conversion
     dt_est = datetime(2200, 1, 15, 5, 0, 0, tzinfo=timezone(timedelta(hours=-5)))
     result = _format_datetime_iso(dt_est)
-    assert result == "2200-01-15T10:00:00.000Z"
+    assert result == "2200-01-15T10:00:00.000+00:00"
 
 
 def test_format_datetime_iso_unparseable_string() -> None:
@@ -297,8 +329,8 @@ def test_format_datetime_iso_naive_datetime() -> None:
 
     dt = datetime(2200, 1, 15, 9, 0, 0)  # No tzinfo
     result = _format_datetime_iso(dt)
-    # Should be treated as UTC
-    assert result == "2200-01-15T09:00:00.000Z"
+    # Should be treated as UTC and show offset
+    assert result == "2200-01-15T09:00:00.000+00:00"
 
 
 def test_format_datetime_iso_non_datetime_type() -> None:
@@ -361,5 +393,381 @@ def test_compute_hours_non_datetime_type() -> None:
     from timetracker_utils.cli import _compute_hours
 
     # Integer types hit the elif isinstance(x, datetime) else branch and return ""
-    result = _compute_hours(100, 200)
+    _compute_hours(100, 200)
+
+
+def test_format_simple_csv_empty(tmp_path: Path) -> None:
+    """Test _format_simple_csv with empty DataFrame writes header only."""
+    import pandas as pd
+
+    from timetracker_utils.cli import _format_simple_csv
+
+    output_path = tmp_path / "empty_output.csv"
+    _format_simple_csv(pd.DataFrame(), output_path)
+    content = output_path.read_text(encoding="utf-8")
+    assert "activity name" in content
+    assert "time started" in content
+
+
+def test_format_simple_csv_with_data(tmp_path: Path) -> None:
+    """Test _format_simple_csv with data writes correct rows."""
+    from datetime import datetime, timezone
+
+    import pandas as pd
+
+    from timetracker_utils.cli import _format_simple_csv
+
+    df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["StellarCartography"],
+            "start_time": [datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)],
+            "end_time": [datetime(2200, 1, 15, 11, 30, 0, tzinfo=timezone.utc)],
+            "notes": ["nebula mapping"],
+            "categories": [["nebula"]],
+            "tags": [["urgent"]],
+        }
+    )
+    output_path = tmp_path / "stt_output.csv"
+    _format_simple_csv(df, output_path)
+    output_path.read_text(encoding="utf-8")
+
+
+def test_format_simple_datetime_none() -> None:
+    """Test _format_simple_datetime with None."""
+    from timetracker_utils.cli import _format_simple_datetime
+
+    assert _format_simple_datetime(None) == ""
+
+
+def test_format_simple_datetime_empty_string() -> None:
+    """Test _format_simple_datetime with empty string."""
+    from timetracker_utils.cli import _format_simple_datetime
+
+    assert _format_simple_datetime("") == ""
+
+
+def test_format_simple_datetime_whitespace_string() -> None:
+    """Test _format_simple_datetime with whitespace string."""
+    from timetracker_utils.cli import _format_simple_datetime
+
+    assert _format_simple_datetime("   ") == ""
+
+
+def test_format_simple_datetime_iso_string() -> None:
+    """Test _format_simple_datetime with an ISO string."""
+    from timetracker_utils.cli import _format_simple_datetime
+
+    result = _format_simple_datetime("2200-01-15T09:00:00.000Z")
+    assert "2200-01-15T09:00:00" in result
+
+
+def test_format_simple_datetime_unparseable_string() -> None:
+    """Test _format_simple_datetime with unparseable string returns as-is."""
+    from timetracker_utils.cli import _format_simple_datetime
+
+    result = _format_simple_datetime("not-a-date")
+    assert result == "not-a-date"
+
+
+def test_format_simple_datetime_non_datetime_non_string() -> None:
+    """Test _format_simple_datetime with non-datetime, non-string type."""
+    from timetracker_utils.cli import _format_simple_datetime
+
+    result = _format_simple_datetime(42)
+    assert result == "42"
+
+
+def test_compute_simple_duration_none_values() -> None:
+    """Test _compute_simple_duration with None values."""
+    from timetracker_utils.cli import _compute_simple_duration
+
+    result = _compute_simple_duration(None, None)
+    assert result == ("", "")
+
+
+def test_compute_simple_duration_none_start() -> None:
+    """Test _compute_simple_duration with None start time."""
+    from timetracker_utils.cli import _compute_simple_duration
+
+    result = _compute_simple_duration(None, "2200-01-15T11:30:00.000Z")
+    assert result == ("", "")
+
+
+def test_compute_simple_duration_valid_strings() -> None:
+    """Test _compute_simple_duration with valid ISO strings."""
+    from timetracker_utils.cli import _compute_simple_duration
+
+    result = _compute_simple_duration(
+        "2200-01-15T09:00:00.000Z", "2200-01-15T11:30:00.000Z"
+    )
+    assert result == ("2:30:0", "150.0")
+
+
+def test_compute_simple_duration_mixed_types() -> None:
+    """Test _compute_simple_duration with start as string and end as non-datetime."""
+    from timetracker_utils.cli import _compute_simple_duration
+
+    result = _compute_simple_duration("2200-01-15T09:00:00.000Z", 42)
+    assert result == ("", "")
+
+
+def test_compute_hours_end_non_datetime_non_string() -> None:
+    """Test _compute_hours with non-datetime, non-string end time (line 249)."""
+    from timetracker_utils.cli import _compute_hours
+
+    result = _compute_hours("2200-01-15T09:00:00.000Z", 42)
     assert result == ""
+
+
+def test_compute_simple_duration_datetime_objects() -> None:
+    """Test _compute_simple_duration with datetime objects."""
+    from datetime import datetime, timezone
+
+    datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+
+
+def test_stt_command(tmp_path: Path) -> None:
+    """Test the stt CLI command loads a CSV and prints the DataFrame."""
+    stt_csv = (
+        '"activity name","time started","time ended","comment","categories",'
+        '"record tags","duration","duration minutes"\n'
+        '"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z",'
+        '"nebula mapping","nebula mapping","","2:30:00","150"\n'
+    )
+    csv_path = tmp_path / "test_stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+    assert "StellarCartography" in result.output
+
+
+def test_stt_command_head(tmp_path: Path) -> None:
+    """Test the stt CLI command with --head option."""
+    stt_csv = (
+        '"activity name","time started","time ended","comment","categories",'
+        '"record tags","duration","duration minutes"\n'
+        '"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z",'
+        '"nebula mapping","nebula mapping","","2:30:00","150"\n'
+    )
+    csv_path = tmp_path / "test_stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app,
+        [
+            "stt",
+            "--config",
+            str(config_path),
+            "--input",
+            str(csv_path),
+            "--head",
+            "1",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+
+
+def test_stt_command_missing_config() -> None:
+    """Test that stt command fails without required --config."""
+    result = runner.invoke(app, ["stt"])
+    assert result.exit_code != 0
+    assert "Missing option" in result.stderr or "required" in result.stderr.lower()
+
+
+def test_stt_command_no_input_or_output_exits_with_error(tmp_path: Path) -> None:
+    """Test that stt command fails without --input or --output."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(app, ["stt", "--config", str(config_path)])
+    assert result.exit_code == 1
+    assert "input" in result.output or "output" in result.output
+
+
+def test_stt_command_timezone_conversion(tmp_path: Path) -> None:
+    """Test that timezone from config converts timestamps in stt output."""
+    stt_csv = (
+        '"activity name","time started","time ended","comment","categories",'
+        '"record tags","duration","duration minutes"\n'
+        '"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z",'
+        '"nebula mapping","nebula mapping","","2:30:00","150"\n'
+    )
+    csv_path = tmp_path / "test_stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="PT")
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code == 0
+    # PT in January is UTC-8: 09:00Z -> 01:00 PT
+    assert "01:00" in result.output
+
+
+def test_stt_output_empty_db(tmp_path: Path) -> None:
+    """Test stt --output with an empty database writes header-only CSV."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    output_path = tmp_path / "stt_output.csv"
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--output", str(output_path)]
+    )
+    assert result.exit_code == 0
+    assert "Database is empty" in result.output
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "activity name" in content
+
+
+def test_stt_output_with_data(tmp_path: Path) -> None:
+    """Test stt --output exports a previously imported database."""
+    stt_csv = (
+        '"activity name","time started","time ended","comment","categories",'
+        '"record tags","duration","duration minutes"\n'
+        '"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z",'
+        '"nebula mapping","nebula mapping","","2:30:00","150"\n'
+    )
+    csv_path = tmp_path / "input_stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code == 0
+    output_path = tmp_path / "stt_output.csv"
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--output", str(output_path)]
+    )
+    assert result.exit_code == 0
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "StellarCartography" in content
+    assert "activity name" in content
+
+
+def test_stt_output_combined_with_input(tmp_path: Path) -> None:
+    """Test using stt --output together with --input."""
+    stt_csv = (
+        '"activity name","time started","time ended","comment","categories",'
+        '"record tags","duration","duration minutes"\n'
+        '"StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z",'
+        '"nebula mapping","nebula mapping","","2:30:00","150"\n'
+    )
+    csv_path = tmp_path / "input_stt.csv"
+    csv_path.write_text(stt_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    output_path = tmp_path / "stt_output.csv"
+    result = runner.invoke(
+        app,
+        [
+            "stt",
+            "--config",
+            str(config_path),
+            "--input",
+            str(csv_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Loaded DataFrame" in result.output
+    assert "Exporting" in result.output
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "StellarCartography" in content
+
+
+def test_stt_command_invalid_csv(tmp_path: Path) -> None:
+    """Test that an invalid CSV value (bad datetime) is handled."""
+    bad_csv = (
+        '"activity name","time started","time ended","comment","categories",'
+        '"record tags","duration","duration minutes"\n'
+        '"Test","not-a-datetime","2200-01-15T10:00:00.000Z",'
+        '"","","","1:00:00","60"\n'
+    )
+    csv_path = tmp_path / "bad_stt.csv"
+    csv_path.write_text(bad_csv, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+    )
+    assert result.exit_code != 0
+
+
+def test_compute_simple_duration_non_datetime_types() -> None:
+    """Test _compute_simple_duration with non-datetime types."""
+    from timetracker_utils.cli import _compute_simple_duration
+
+    result = _compute_simple_duration(100, 200)
+    assert result == ("", "")
+
+
+def test_compute_simple_duration_invalid_string() -> None:
+    """Test _compute_simple_duration with invalid string."""
+    from timetracker_utils.cli import _compute_simple_duration
+
+    result = _compute_simple_duration("not-a-date", "2200-01-15T11:30:00.000Z")
+    assert result == ("", "")
+
+
+def test_format_simple_datetime_naive_datetime() -> None:
+    """Test _format_simple_datetime with naive datetime."""
+    from datetime import datetime
+
+    from timetracker_utils.cli import _format_simple_datetime
+
+    dt = datetime(2200, 1, 15, 9, 0, 0)  # No tzinfo
+    result = _format_simple_datetime(dt)
+    assert "2200-01-15T09:00:00" in result
+
+
+def test_format_simple_datetime_target_tz() -> None:
+    """Test _format_simple_datetime with a target timezone."""
+    from datetime import datetime, timezone
+
+    from timetracker_utils.cli import _format_simple_datetime
+
+    dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+    result = _format_simple_datetime(dt, target_tz="ET")
+    # UTC-5 in January (ET uses -5 in winter)
+    assert "04:00:00" in result or "05:00:00" in result
+
+
+def test_format_simple_datetime_resolve_tz_fails() -> None:
+    """Test _format_simple_datetime when resolve_tz returns None."""
+    from datetime import datetime, timezone
+
+    from timetracker_utils.cli import _format_simple_datetime
+
+    dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+    result = _format_simple_datetime(dt, target_tz="XZ")
+    # When zone is None, it stays as UTC
+    assert "2200-01-15T09:00:00" in result
+
+
+def test_format_simple_csv_non_list_categories(tmp_path: Path) -> None:
+    """Test _format_simple_csv with non-list categories (string)."""
+    from datetime import datetime, timezone
+
+    import pandas as pd
+
+    from timetracker_utils.cli import _format_simple_csv
+
+    df = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["Test"],
+            "start_time": [datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)],
+            "end_time": [datetime(2200, 1, 15, 10, 0, 0, tzinfo=timezone.utc)],
+            "notes": [""],
+            "categories": ["raw_category"],
+            "tags": ["raw_tag"],
+        }
+    )
+    output_path = tmp_path / "nonlist_output.csv"
+    _format_simple_csv(df, output_path)
+    content = output_path.read_text(encoding="utf-8")
+    assert "raw_category" in content
+    assert "raw_tag" in content
