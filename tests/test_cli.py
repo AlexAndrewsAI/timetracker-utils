@@ -2,6 +2,7 @@
 
 # ruff: noqa: E501 - CSV data lines exceed line length limit
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -858,3 +859,167 @@ def test_export_command_unknown_format(tmp_path: Path) -> None:
     )
     assert result.exit_code == 1
     assert "Unknown format" in result.stderr or "Unknown format" in result.output
+
+
+def _add_entries_to_db(tmp_path: Path) -> tuple[Path, str]:
+    """Add sample entries to the database and return (config_path, db_path)."""
+    db_path = tmp_path / "data" / "timetracker" / "db.sqlite3"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE activities ("
+        "date TEXT, activity TEXT, start_time TEXT, "
+        "end_time TEXT, notes TEXT, categories TEXT, tags TEXT)"
+    )
+    entries = [
+        (
+            "1/15/2200",
+            "StellarCartography",
+            "2200-01-15T09:00:00+00:00",
+            "2200-01-15T11:30:00+00:00",
+            "nebula mapping",
+            '["nebula"]',
+            '["urgent", "space"]',
+        ),
+        (
+            "1/15/2200",
+            "DataAnalysis",
+            "2200-01-15T13:00:00+00:00",
+            "2200-01-15T14:00:00+00:00",
+            "processing",
+            '["analysis", "data"]',
+            '["urgent"]',
+        ),
+    ]
+    conn.executemany(
+        "INSERT INTO activities VALUES (?, ?, ?, ?, ?, ?, ?)",
+        entries,
+    )
+    conn.commit()
+    conn.close()
+    config_path = tmp_path / "timetracker.yml"
+    config_path.write_text(
+        yaml.dump({"database": str(db_path), "timezone": "ET"}),
+        encoding="utf-8",
+    )
+    return config_path, str(db_path)
+
+
+def test_report_command(tmp_path: Path) -> None:
+    """Test the report CLI command with valid date."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app, ["report", "--config", str(config_path), "--date", "2200-01-15"]
+    )
+    assert result.exit_code == 0
+    assert "Daily Report" in result.output
+    assert "Total Time" in result.output
+    assert "StellarCartography" in result.output
+    assert "DataAnalysis" in result.output
+    assert "nebula" in result.output
+    assert "data" in result.output
+    assert "urgent" in result.output
+    assert "space" in result.output
+
+
+def test_report_command_empty_db(tmp_path: Path) -> None:
+    """Test the report command with empty database."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["report", "--config", str(config_path), "--date", "2200-01-15"]
+    )
+    assert result.exit_code != 0
+    assert "Database is empty" in result.output
+
+
+def test_report_command_no_entries_date(tmp_path: Path) -> None:
+    """Test the report command when no entries exist for the date."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app, ["report", "--config", str(config_path), "--date", "2200-01-16"]
+    )
+    assert result.exit_code != 0
+    assert "No entries found" in result.output
+
+
+def test_report_command_invalid_date(tmp_path: Path) -> None:
+    """Test the report command with an invalid date format."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app, ["report", "--config", str(config_path), "--date", "invalid-date"]
+    )
+    assert result.exit_code == 1
+    assert "Invalid date format" in result.output
+
+
+def test_seconds_to_hhmm() -> None:
+    """Test _seconds_to_hhmm helper."""
+    from timetracker_utils.cli import _seconds_to_hhmm
+
+    assert _seconds_to_hhmm(0) == "00:00"
+    assert _seconds_to_hhmm(3661) == "01:01"
+    assert _seconds_to_hhmm(9000) == "02:30"
+    assert _seconds_to_hhmm(-10) == "00:00"
+
+
+def test_report_command_short_date_flag(tmp_path: Path) -> None:
+    """Test the report command with short -d flag."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app, ["report", "--config", str(config_path), "-d", "2200-01-15"]
+    )
+    assert result.exit_code == 0
+    assert "Daily Report" in result.output
+
+
+def test_format_simple_datetime_utcoffset_none() -> None:
+    """Test _format_simple_datetime when utcoffset() returns None (line 178).
+
+    Uses a custom tzinfo with None utcoffset and an unresolvable target
+    timezone so astimezone is skipped, exposing the fallback branch.
+    """
+    from datetime import datetime, tzinfo
+
+    from timetracker_utils.cli import _format_simple_datetime
+
+    class NoUTCOffsetTZ(tzinfo):
+        def utcoffset(self, _dt: datetime | None) -> None:
+            return None
+
+        def dst(self, _dt: datetime | None) -> None:
+            return None
+
+        def tzname(self, _dt: datetime | None) -> str:
+            return "NoOffset"
+
+    dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=NoUTCOffsetTZ())
+    # target_tz='XZ' makes resolve_tz return None, so astimezone is skipped
+    # and the custom tzinfo's utcoffset() returns None -> hits line 178
+    result = _format_simple_datetime(dt, target_tz="XZ")
+    assert "+00:00" in result
+    assert "2200-01-15T09:00:00" in result
+
+
+def test_format_datetime_iso_utcoffset_none() -> None:
+    """Test _format_datetime_iso when utcoffset() returns None (line 239).
+
+    Same strategy: custom tzinfo with None utcoffset and unresolvable target.
+    """
+    from datetime import datetime, tzinfo
+
+    from timetracker_utils.cli import _format_datetime_iso
+
+    class NoUTCOffsetTZ(tzinfo):
+        def utcoffset(self, _dt: datetime | None) -> None:
+            return None
+
+        def dst(self, _dt: datetime | None) -> None:
+            return None
+
+        def tzname(self, _dt: datetime | None) -> str:
+            return "NoOffset"
+
+    dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=NoUTCOffsetTZ())
+    result = _format_datetime_iso(dt, target_tz="XZ")
+    assert "+00:00" in result
+    assert "2200-01-15T09:00:00" in result

@@ -14,7 +14,11 @@ import typer
 from timetracker_utils import __version__
 from timetracker_utils.config import load_config
 from timetracker_utils.database import Database
-from timetracker_utils.datetime_utils import convert_column_tz, resolve_tz
+from timetracker_utils.datetime_utils import (
+    aggregate_by_date,
+    convert_column_tz,
+    resolve_tz,
+)
 from timetracker_utils.simple_time_tracker import SimpleTimeTracker
 from timetracker_utils.time_cop import TimeCop
 
@@ -169,7 +173,16 @@ def _format_simple_datetime(val: object, target_tz: str = "UTC") -> str:
         dt = dt.astimezone(zone)
     base = dt.strftime("%Y-%m-%dT%H:%M:%S")
     millis = f"{dt.microsecond // 1000:03d}"
-    offset = dt.strftime("%:z")
+    offset_seconds = dt.utcoffset()
+    if offset_seconds is None:
+        offset = "+00:00"
+    else:
+        total_seconds = int(offset_seconds.total_seconds())
+        sign = "+" if total_seconds >= 0 else "-"
+        total_seconds = abs(total_seconds)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        offset = f"{sign}{hours:02d}:{minutes:02d}"
     return f"{base}.{millis}{offset}"
 
 
@@ -221,7 +234,16 @@ def _format_datetime_iso(val: object, target_tz: str = "UTC") -> str:
         dt = dt.astimezone(zone)
     base = dt.strftime("%Y-%m-%dT%H:%M:%S")
     millis = f"{dt.microsecond // 1000:03d}"
-    offset = dt.strftime("%:z")
+    offset_seconds = dt.utcoffset()
+    if offset_seconds is None:
+        offset = "+00:00"
+    else:
+        total_seconds = int(offset_seconds.total_seconds())
+        sign = "+" if total_seconds >= 0 else "-"
+        total_seconds = abs(total_seconds)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        offset = f"{sign}{hours:02d}:{minutes:02d}"
     return f"{base}.{millis}{offset}"
 
 
@@ -346,6 +368,83 @@ def export(
     else:
         typer.echo(f"Unknown format: {format}. Use 'timecop' or 'stt'.", err=True)
         raise typer.Exit(code=1)
+
+
+def _seconds_to_hhmm(total_seconds: float) -> str:
+    """Convert seconds to hh:mm string format."""
+    total_seconds = max(0.0, total_seconds)
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    return f"{hours:02d}:{minutes:02d}"
+
+
+@app.command()
+def report(
+    config: Path = typer.Option(
+        ..., "--config", "-c", help="Path to the YAML configuration file."
+    ),
+    date: str = typer.Option(
+        ..., "--date", "-d", help="Date to report on (yyyy-mm-dd format)."
+    ),
+) -> None:
+    """Show a daily report of activities, tags, and categories.
+
+    Aggregates total time (in hh:mm) and displays tables for activities,
+    tags, and categories for the specified date.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    cfg = load_config(config)
+
+    try:
+        report_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        typer.echo(f"Invalid date format: {date!r}. Use yyyy-mm-dd.", err=True)
+        raise typer.Exit(code=1) from exc
+
+    db = Database()
+    db_entries = db.read(cfg.database)
+
+    if db_entries.empty:
+        typer.echo("Database is empty.")
+        raise typer.Exit(code=1)
+
+    result = aggregate_by_date(db_entries, report_date, cfg.timezone)
+
+    if result["is_empty"]:
+        typer.echo(f"No entries found for {date}.")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"\n{'=' * 50}")
+    typer.echo(f"Daily Report: {report_date.strftime('%A, %B %d, %Y')}")
+    typer.echo(f"{'=' * 50}")
+    typer.echo(f"Total Time: {_seconds_to_hhmm(result['total_seconds'])}\n")
+
+    activity_breakdown = result["activity_breakdown"]
+    if activity_breakdown:
+        typer.echo("-" * 30)
+        typer.echo(f"{'Activity':<20} {'Time':>8}")
+        typer.echo("-" * 30)
+        for activity, secs in sorted(activity_breakdown.items()):
+            typer.echo(f"{activity:<20} {_seconds_to_hhmm(secs):>8}")
+        typer.echo()
+
+    tag_breakdown = result["tag_breakdown"]
+    if tag_breakdown:
+        typer.echo("-" * 30)
+        typer.echo(f"{'Tag':<20} {'Time':>8}")
+        typer.echo("-" * 30)
+        for tag, secs in sorted(tag_breakdown.items()):
+            typer.echo(f"{tag:<20} {_seconds_to_hhmm(secs):>8}")
+        typer.echo()
+
+    category_breakdown = result["category_breakdown"]
+    if category_breakdown:
+        typer.echo("-" * 30)
+        typer.echo(f"{'Category':<20} {'Time':>8}")
+        typer.echo("-" * 30)
+        for category, secs in sorted(category_breakdown.items()):
+            typer.echo(f"{category:<20} {_seconds_to_hhmm(secs):>8}")
+        typer.echo()
 
 
 if __name__ == "__main__":
