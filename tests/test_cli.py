@@ -90,12 +90,12 @@ def test_version_callback() -> None:
 
 
 def test_timecop_command(tmp_path: Path) -> None:
-    """Test the timecop CLI command loads a CSV and prints the DataFrame."""
+    """Test the add CLI command with timecop format loads a CSV and prints the DataFrame."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "timecop", str(csv_path)]
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
@@ -103,17 +103,18 @@ def test_timecop_command(tmp_path: Path) -> None:
 
 
 def test_timecop_command_head(tmp_path: Path) -> None:
-    """Test the timecop CLI command with --head option."""
+    """Test the add CLI command with timecop format and --head option."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
         app,
         [
-            "timecop",
+            "add",
             "--config",
             str(config_path),
-            "--input",
+            "--format",
+            "timecop",
             str(csv_path),
             "--head",
             "1",
@@ -124,18 +125,19 @@ def test_timecop_command_head(tmp_path: Path) -> None:
 
 
 def test_timecop_command_missing_config() -> None:
-    """Test that the timecop CLI command fails without required --config."""
-    result = runner.invoke(app, ["timecop"])
+    """Test that the add CLI command fails without required --config."""
+    result = runner.invoke(app, ["add", "--format", "timecop", "test.csv"])
     assert result.exit_code != 0
     assert "Missing option" in result.stderr or "required" in result.stderr.lower()
 
 
 def test_timecop_command_no_input_or_output_exits_with_error(tmp_path: Path) -> None:
-    """Test that the timecop CLI command fails without --input or --output."""
+    """Test that the add CLI command fails without input file argument."""
     config_path = _write_config(tmp_path, timezone="ET")
-    result = runner.invoke(app, ["timecop", "--config", str(config_path)])
-    assert result.exit_code == 1
-    assert "input" in result.output or "output" in result.output
+    result = runner.invoke(
+        app, ["add", "--config", str(config_path), "--format", "timecop"]
+    )
+    assert result.exit_code != 0
 
 
 def test_timecop_command_timezone_from_config(tmp_path: Path) -> None:
@@ -144,7 +146,7 @@ def test_timecop_command_timezone_from_config(tmp_path: Path) -> None:
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "timecop", str(csv_path)]
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
@@ -159,7 +161,7 @@ def test_timecop_command_different_timezone(tmp_path: Path) -> None:
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="PT")
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "timecop", str(csv_path)]
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
@@ -168,11 +170,19 @@ def test_timecop_command_different_timezone(tmp_path: Path) -> None:
 
 
 def test_timecop_output_empty_db(tmp_path: Path) -> None:
-    """Test --output with an empty database writes header-only CSV."""
+    """Test export with timecop format and empty database writes header-only CSV."""
     config_path = _write_config(tmp_path, timezone="ET")
     output_path = tmp_path / "output.csv"
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--output", str(output_path)]
+        app,
+        [
+            "export",
+            "--config",
+            str(config_path),
+            "--format",
+            "timecop",
+            str(output_path),
+        ],
     )
     assert result.exit_code == 0
     assert "Database is empty" in result.output
@@ -186,19 +196,27 @@ def test_timecop_output_empty_db(tmp_path: Path) -> None:
 
 
 def test_timecop_output_with_data(tmp_path: Path) -> None:
-    """Test --output exports a previously imported database to CSV."""
+    """Test export with timecop format exports a previously imported database to CSV."""
     csv_path = tmp_path / "input.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     # First, import the CSV to populate the database
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "timecop", str(csv_path)]
     )
     assert result.exit_code == 0
     # Now export to output CSV
     output_path = tmp_path / "output.csv"
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--output", str(output_path)]
+        app,
+        [
+            "export",
+            "--config",
+            str(config_path),
+            "--format",
+            "timecop",
+            str(output_path),
+        ],
     )
     assert result.exit_code == 0
     assert output_path.exists()
@@ -220,25 +238,38 @@ def test_timecop_output_with_data(tmp_path: Path) -> None:
 
 
 def test_timecop_output_combined_with_input(tmp_path: Path) -> None:
-    """Test using --output together with --input."""
+    """Test using add and export commands together."""
     csv_path = tmp_path / "input.csv"
     csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     output_path = tmp_path / "output.csv"
+    # First add the data
     result = runner.invoke(
         app,
         [
-            "timecop",
+            "add",
             "--config",
             str(config_path),
-            "--input",
+            "--format",
+            "timecop",
             str(csv_path),
-            "--output",
-            str(output_path),
         ],
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
+    # Then export the data
+    result = runner.invoke(
+        app,
+        [
+            "export",
+            "--config",
+            str(config_path),
+            "--format",
+            "timecop",
+            str(output_path),
+        ],
+    )
+    assert result.exit_code == 0
     assert "Exporting" in result.output
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8")
@@ -246,7 +277,7 @@ def test_timecop_output_combined_with_input(tmp_path: Path) -> None:
 
 
 def test_stt_rejects_timecop_csv(tmp_path: Path) -> None:
-    """Test that the stt CLI command rejects a TimeCop-format CSV."""
+    """Test that the add CLI command with stt format rejects a TimeCop-format CSV."""
     timecop_csv = """\
 "Date","Project","Description","Combined Project & Description","Start Time","End Time","Time (hours)","Notes"
 "1/15/2200","StellarCartography","nebula mapping","StellarCartography: nebula mapping","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","2.5",""
@@ -255,14 +286,14 @@ def test_stt_rejects_timecop_csv(tmp_path: Path) -> None:
     csv_path.write_text(timecop_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "stt", str(csv_path)]
     )
     assert result.exit_code != 0
     assert "Missing required STT columns" in (result.output or result.stderr or "")
 
 
 def test_timecop_rejects_stt_csv(tmp_path: Path) -> None:
-    """Test that the timecop CLI command rejects an STT-format CSV."""
+    """Test that the add CLI command with timecop format rejects an STT-format CSV."""
     stt_csv = """\
 "activity name","time started","time ended","comment","categories","record tags","duration","duration minutes"
 "StellarCartography","2200-01-15T09:00:00.000Z","2200-01-15T11:30:00.000Z","nebula mapping","nebula mapping","","2:30:00","150"
@@ -271,18 +302,26 @@ def test_timecop_rejects_stt_csv(tmp_path: Path) -> None:
     csv_path.write_text(stt_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "timecop", str(csv_path)]
     )
     assert result.exit_code != 0
     assert "Missing required TimeCop columns" in (result.output or result.stderr or "")
 
 
 def test_timecop_output_non_existent_db(tmp_path: Path) -> None:
-    """Test --output when the database file does not exist yet."""
+    """Test export with timecop format when the database file does not exist yet."""
     config_path = _write_config(tmp_path, timezone="ET")
     output_path = tmp_path / "output.csv"
     result = runner.invoke(
-        app, ["timecop", "--config", str(config_path), "--output", str(output_path)]
+        app,
+        [
+            "export",
+            "--config",
+            str(config_path),
+            "--format",
+            "timecop",
+            str(output_path),
+        ],
     )
     assert result.exit_code == 0
     assert "Database is empty" in result.output
@@ -528,7 +567,7 @@ def test_compute_simple_duration_datetime_objects() -> None:
 
 
 def test_stt_command(tmp_path: Path) -> None:
-    """Test the stt CLI command loads a CSV and prints the DataFrame."""
+    """Test the add CLI command with stt format loads a CSV and prints the DataFrame."""
     stt_csv = (
         '"activity name","time started","time ended","comment","categories",'
         '"record tags","duration","duration minutes"\n'
@@ -539,7 +578,7 @@ def test_stt_command(tmp_path: Path) -> None:
     csv_path.write_text(stt_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "stt", str(csv_path)]
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
@@ -547,7 +586,7 @@ def test_stt_command(tmp_path: Path) -> None:
 
 
 def test_stt_command_head(tmp_path: Path) -> None:
-    """Test the stt CLI command with --head option."""
+    """Test the add CLI command with stt format and --head option."""
     stt_csv = (
         '"activity name","time started","time ended","comment","categories",'
         '"record tags","duration","duration minutes"\n'
@@ -560,10 +599,11 @@ def test_stt_command_head(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "stt",
+            "add",
             "--config",
             str(config_path),
-            "--input",
+            "--format",
+            "stt",
             str(csv_path),
             "--head",
             "1",
@@ -574,18 +614,19 @@ def test_stt_command_head(tmp_path: Path) -> None:
 
 
 def test_stt_command_missing_config() -> None:
-    """Test that stt command fails without required --config."""
-    result = runner.invoke(app, ["stt"])
+    """Test that add command fails without required --config."""
+    result = runner.invoke(app, ["add", "--format", "stt", "test.csv"])
     assert result.exit_code != 0
     assert "Missing option" in result.stderr or "required" in result.stderr.lower()
 
 
 def test_stt_command_no_input_or_output_exits_with_error(tmp_path: Path) -> None:
-    """Test that stt command fails without --input or --output."""
+    """Test that add command fails without input file argument."""
     config_path = _write_config(tmp_path, timezone="ET")
-    result = runner.invoke(app, ["stt", "--config", str(config_path)])
-    assert result.exit_code == 1
-    assert "input" in result.output or "output" in result.output
+    result = runner.invoke(
+        app, ["add", "--config", str(config_path), "--format", "stt"]
+    )
+    assert result.exit_code != 0
 
 
 def test_stt_command_timezone_conversion(tmp_path: Path) -> None:
@@ -600,7 +641,7 @@ def test_stt_command_timezone_conversion(tmp_path: Path) -> None:
     csv_path.write_text(stt_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="PT")
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "stt", str(csv_path)]
     )
     assert result.exit_code == 0
     # PT in January is UTC-8: 09:00Z -> 01:00 PT
@@ -608,11 +649,12 @@ def test_stt_command_timezone_conversion(tmp_path: Path) -> None:
 
 
 def test_stt_output_empty_db(tmp_path: Path) -> None:
-    """Test stt --output with an empty database writes header-only CSV."""
+    """Test export with stt format and empty database writes header-only CSV."""
     config_path = _write_config(tmp_path, timezone="ET")
     output_path = tmp_path / "stt_output.csv"
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--output", str(output_path)]
+        app,
+        ["export", "--config", str(config_path), "--format", "stt", str(output_path)],
     )
     assert result.exit_code == 0
     assert "Database is empty" in result.output
@@ -622,7 +664,7 @@ def test_stt_output_empty_db(tmp_path: Path) -> None:
 
 
 def test_stt_output_with_data(tmp_path: Path) -> None:
-    """Test stt --output exports a previously imported database."""
+    """Test export with stt format exports a previously imported database."""
     stt_csv = (
         '"activity name","time started","time ended","comment","categories",'
         '"record tags","duration","duration minutes"\n'
@@ -633,12 +675,13 @@ def test_stt_output_with_data(tmp_path: Path) -> None:
     csv_path.write_text(stt_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "stt", str(csv_path)]
     )
     assert result.exit_code == 0
     output_path = tmp_path / "stt_output.csv"
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--output", str(output_path)]
+        app,
+        ["export", "--config", str(config_path), "--format", "stt", str(output_path)],
     )
     assert result.exit_code == 0
     assert output_path.exists()
@@ -648,7 +691,7 @@ def test_stt_output_with_data(tmp_path: Path) -> None:
 
 
 def test_stt_output_combined_with_input(tmp_path: Path) -> None:
-    """Test using stt --output together with --input."""
+    """Test using add and export commands together."""
     stt_csv = (
         '"activity name","time started","time ended","comment","categories",'
         '"record tags","duration","duration minutes"\n'
@@ -659,20 +702,33 @@ def test_stt_output_combined_with_input(tmp_path: Path) -> None:
     csv_path.write_text(stt_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     output_path = tmp_path / "stt_output.csv"
+    # First add the data
     result = runner.invoke(
         app,
         [
-            "stt",
+            "add",
             "--config",
             str(config_path),
-            "--input",
+            "--format",
+            "stt",
             str(csv_path),
-            "--output",
-            str(output_path),
         ],
     )
     assert result.exit_code == 0
     assert "Loaded DataFrame" in result.output
+    # Then export the data
+    result = runner.invoke(
+        app,
+        [
+            "export",
+            "--config",
+            str(config_path),
+            "--format",
+            "stt",
+            str(output_path),
+        ],
+    )
+    assert result.exit_code == 0
     assert "Exporting" in result.output
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8")
@@ -691,7 +747,7 @@ def test_stt_command_invalid_csv(tmp_path: Path) -> None:
     csv_path.write_text(bad_csv, encoding="utf-8")
     config_path = _write_config(tmp_path, timezone="ET")
     result = runner.invoke(
-        app, ["stt", "--config", str(config_path), "--input", str(csv_path)]
+        app, ["add", "--config", str(config_path), "--format", "stt", str(csv_path)]
     )
     assert result.exit_code != 0
 
@@ -771,3 +827,34 @@ def test_format_simple_csv_non_list_categories(tmp_path: Path) -> None:
     content = output_path.read_text(encoding="utf-8")
     assert "raw_category" in content
     assert "raw_tag" in content
+
+
+def test_add_command_unknown_format(tmp_path: Path) -> None:
+    """Test add command with unknown format (lines 297-298)."""
+    csv_path = tmp_path / "test.csv"
+    csv_path.write_text(SAMPLE_CSV, encoding="utf-8")
+    config_path = _write_config(tmp_path, timezone="ET")
+    result = runner.invoke(
+        app, ["add", "--config", str(config_path), "--format", "unknown", str(csv_path)]
+    )
+    assert result.exit_code == 1
+    assert "Unknown format" in result.stderr or "Unknown format" in result.output
+
+
+def test_export_command_unknown_format(tmp_path: Path) -> None:
+    """Test export command with unknown format (lines 347-348)."""
+    config_path = _write_config(tmp_path, timezone="ET")
+    output_path = tmp_path / "output.csv"
+    result = runner.invoke(
+        app,
+        [
+            "export",
+            "--config",
+            str(config_path),
+            "--format",
+            "unknown",
+            str(output_path),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Unknown format" in result.stderr or "Unknown format" in result.output

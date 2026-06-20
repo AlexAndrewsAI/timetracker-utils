@@ -77,6 +77,17 @@ def test_base_entry_parse_list_fields_string_fallback() -> None:
     assert entry.categories == ["42"]
 
 
+def test_base_entry_parse_list_fields_edge_case_empty_list_string() -> None:
+    """Test parse_list_fields edge case where str(value).strip() == [] (line 177)."""
+    entry = BaseTimeEntry(
+        activity="Test",
+        start_time="2200-01-15T09:00:00.000Z",
+        end_time="2200-01-15T11:30:00.000Z",
+        categories=[],
+    )
+    assert entry.categories == []
+
+
 def test_base_entry_parse_list_fields_non_string_empty() -> None:
     """Test that empty categories/tags defaults to empty list."""
     entry = BaseTimeEntry(
@@ -199,26 +210,67 @@ def test_base_tracker_total_hours_by_activity_with_data() -> None:
     tracker.total_hours_by_activity()
 
 
-def test_base_entry_parse_datetime_naive_datetime_object() -> None:
-    """Test parse_datetime with naive datetime object (tzinfo is None, line 120)."""
+def test_base_entry_parse_datetime_naive_datetime_object_zone_none() -> None:
+    """Test parse_datetime with naive datetime object when resolve_tz returns None."""
     from datetime import datetime
+    from unittest.mock import patch
 
-    entry = BaseTimeEntry(
-        activity="Test",
-        start_time=datetime(2200, 1, 15, 9, 0, 0),  # naive datetime
-        end_time="2200-01-15T11:30:00.000Z",
-    )
-    # Naive datetime should be assumed UTC
+    with patch("timetracker_utils.datetime_utils.resolve_tz", return_value=None):
+        entry = BaseTimeEntry.model_validate(
+            {
+                "activity": "Test",
+                "start_time": datetime(2200, 1, 15, 9, 0, 0),  # naive datetime
+                "end_time": "2200-01-15T11:30:00.000Z",
+            },
+            context={"default_timezone": "ET"},
+        )
+    # Should still work, falling back to UTC
     assert entry.start_time.tzinfo is not None
 
 
-def test_base_entry_hours_empty_string_returns_none() -> None:
-    """Test hours validator with empty string (line 157)."""
+def test_base_entry_parse_datetime_naive_datetime_object_zone_not_none() -> None:
+    """Test parse_datetime with naive datetime object when resolve_tz returns zone."""
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import patch
+
+    test_zone = timezone(timedelta(hours=-5))
+    with patch("timetracker_utils.datetime_utils.resolve_tz", return_value=test_zone):
+        entry = BaseTimeEntry.model_validate(
+            {
+                "activity": "Test",
+                "start_time": datetime(2200, 1, 15, 9, 0, 0),  # naive datetime
+                "end_time": "2200-01-15T11:30:00.000Z",
+            },
+            context={"default_timezone": "ET"},
+        )
+    # Should convert to UTC
+    assert entry.start_time.tzinfo is not None
+
+
+def test_base_entry_parse_datetime_naive_string_zone_none() -> None:
+    """Test parse_datetime with naive string when resolve_tz returns None (line 152)."""
+    from unittest.mock import patch
+
+    with patch("timetracker_utils.datetime_utils.resolve_tz", return_value=None):
+        entry = BaseTimeEntry.model_validate(
+            {
+                "activity": "Test",
+                "start_time": "2200-01-15T09:00:00",  # naive string
+                "end_time": "2200-01-15T11:30:00.000Z",
+            },
+            context={"default_timezone": "ET"},
+        )
+    # Should still work, falling back to UTC
+    assert entry.start_time.tzinfo is not None
+
+
+def test_base_entry_hours_whitespace_string() -> None:
+    """Test hours validator with whitespace-only string (line 187)."""
     entry = BaseTimeEntry(
         activity="Test",
         start_time="2200-01-15T09:00:00.000Z",
         end_time="2200-01-15T11:30:00.000Z",
-        hours="",
+        hours="   ",
     )
     # hours should be computed from end_time - start_time
     assert entry.hours == 2.5

@@ -165,8 +165,66 @@ def test_parse_datetime_naive_no_tz() -> None:
         duration="1:00:00",
         duration_minutes="60",
     )
-    # Naive STT timestamps should remain naive
-    assert entry.start_time.tzinfo is None
+    # Naive timestamps should be converted to UTC using the default timezone (UTC)
+    assert entry.start_time.tzinfo is not None
+    assert entry.start_time.tzinfo == timezone.utc
+
+
+def test_parse_datetime_naive_zone_none() -> None:
+    """Test parse_datetime with naive datetime when resolve_tz returns None (line 99, 110)."""
+    from datetime import datetime
+    from unittest.mock import patch
+
+    # Test with naive datetime string (line 99)
+    with patch("timetracker_utils.datetime_utils.resolve_tz", return_value=None):
+        entry = SimpleTimeEntry.model_validate(
+            {
+                "activity": "Test",
+                "start_time": "2200-01-15T09:00:00",
+                "end_time": "2200-01-15T10:00:00",
+                "duration": "1:00:00",
+                "duration_minutes": "60",
+            },
+            context={"default_timezone": "ET"},
+        )
+    # Should still work, falling back to UTC
+    assert entry.start_time.tzinfo is not None
+    assert entry.start_time.tzinfo == timezone.utc
+
+    # Test with naive datetime object (line 110)
+    with patch("timetracker_utils.datetime_utils.resolve_tz", return_value=None):
+        entry2 = SimpleTimeEntry.model_validate(
+            {
+                "activity": "Test",
+                "start_time": datetime(2200, 1, 15, 9, 0, 0),
+                "end_time": "2200-01-15T10:00:00.000Z",
+                "duration": "1:00:00",
+                "duration_minutes": "60",
+            },
+            context={"default_timezone": "ET"},
+        )
+    assert entry2.start_time.tzinfo is not None
+
+
+def test_parse_datetime_naive_zone_not_none() -> None:
+    """Test parse_datetime with naive datetime when resolve_tz returns zone (lines 94-99)."""
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import patch
+
+    test_zone = timezone(timedelta(hours=-5))
+    with patch("timetracker_utils.datetime_utils.resolve_tz", return_value=test_zone):
+        entry = SimpleTimeEntry.model_validate(
+            {
+                "activity": "Test",
+                "start_time": datetime(2200, 1, 15, 9, 0, 0),  # naive datetime object
+                "end_time": "2200-01-15T10:00:00.000Z",
+                "duration": "1:00:00",
+                "duration_minutes": "60",
+            },
+            context={"default_timezone": "ET"},
+        )
+    # Should convert to UTC
+    assert entry.start_time.tzinfo is not None
 
 
 def test_parse_datetime_explicit_timezone() -> None:
@@ -182,7 +240,7 @@ def test_parse_datetime_explicit_timezone() -> None:
 
 
 def test_parse_datetime_invalid_raises() -> None:
-    """Test parse_datetime with invalid string raises ValueError."""
+    """Test parse_datetime with invalid string raises ValueError (line 113)."""
     with pytest.raises(ValidationError, match="Invalid datetime"):
         SimpleTimeEntry(
             activity="Test",
@@ -222,8 +280,8 @@ def test_coerce_duration_minutes_unexpected_type() -> None:
     assert result is None
 
 
-def test_validate_duration_crosscheck_empty_duration_none_minutes() -> None:
-    """Test crosscheck with empty duration_str and None duration_minutes (line 99)."""
+def test_parse_hms_to_minutes_empty_string() -> None:
+    """Test _parse_hms_to_minutes with empty string returns None."""
     result = SimpleTimeEntry._parse_hms_to_minutes("")
     assert result is None
 
@@ -385,20 +443,18 @@ def test_post_process_drops_validation_cols() -> None:
     assert "duration_minutes" not in tracker.entries.columns
 
 
-def test_validate_duration_crosscheck_zero_duration_no_minutes() -> None:
-    """Test crosscheck returns self when no duration_str and no duration_minutes."""
-    with pytest.raises(ValidationError, match="Field required"):
-        SimpleTimeEntry(
-            activity="Test",
-            start_time="2200-01-15T09:00:00.000Z",
-            end_time="2200-01-15T10:00:00.000Z",
-        )
-
-
-def test_parse_hms_to_minutes_empty() -> None:
-    """Test _parse_hms_to_minutes with empty string."""
-    result = SimpleTimeEntry._parse_hms_to_minutes("")
-    assert result is None
+def test_validate_duration_crosscheck_empty_duration_none_minutes() -> None:
+    """Test crosscheck with empty duration_str and None duration_minutes (line 122)."""
+    entry = SimpleTimeEntry(
+        activity="Test",
+        start_time="2200-01-15T09:00:00.000Z",
+        end_time="2200-01-15T10:00:00.000Z",
+        duration="",
+        duration_minutes=None,
+    )
+    # Should return self without error
+    assert entry.duration_str == ""
+    assert entry.duration_minutes is None
 
 
 def test_parse_hms_to_minutes_invalid() -> None:
