@@ -55,24 +55,23 @@ max_conflict_display: 100
 
 ### CLI
 
-The package provides a `timetracker` CLI with commands for both supported formats:
+The package provides a `timetracker` CLI with unified commands for both supported formats:
 
 ```bash
 # Show version
 uv run timetracker --version
 
 # Import a TimeCop CSV file and display entries
-uv run timetracker timecop --config tests/timetracker.yml --input tests/example_timecop.csv
-
-# Export the database back to TimeCop CSV
-uv run timetracker timecop --config tests/timetracker.yml --output timecop_export.csv
-
+uv run timetracker add --config tests/timetracker.yml --format timecop tests/example_timecop.csv
 
 # Import a Simple Time Tracker CSV file and display entries
-uv run timetracker stt --config tests/timetracker.yml --input tests/example_stt.csv
+uv run timetracker add --config tests/timetracker.yml --format stt tests/example_stt.csv
+
+# Export the database back to TimeCop CSV
+uv run timetracker export --config tests/timetracker.yml --format timecop timecop_export.csv
 
 # Export the database back to Simple Time Tracker CSV
-uv run timetracker stt --config tests/timetracker.yml --output stt_export.csv
+uv run timetracker export --config tests/timetracker.yml --format stt stt_export.csv
 ```
 
 ### Python API

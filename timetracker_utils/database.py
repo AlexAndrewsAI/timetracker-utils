@@ -102,8 +102,8 @@ def _deserialise_lists(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _try_json_loads(value: str) -> bool:
-    """Safely test if a string can be parsed as JSON."""
+def _try_json_loads(value: Any) -> bool:
+    """Safely test if a value can be parsed as JSON."""
     try:
         json.loads(value)
         return True
@@ -314,7 +314,7 @@ class Database:
     def _merge_dataframes(
         existing: pd.DataFrame,
         incoming: pd.DataFrame,
-        max_conflict_display: int,
+        _max_conflict_display: int,
     ) -> tuple[pd.DataFrame, int, int, int]:
         if incoming.empty:
             return existing, 0, 0, 0
@@ -335,7 +335,6 @@ class Database:
         incoming["_merge_key"] = incoming.apply(_make_key, axis=1)
 
         new_rows: list[pd.DataFrame] = []
-        conflicts: list[dict[str, Any]] = []
         new_count = 0
         skipped_count = 0
         updated_count = 0
@@ -374,34 +373,7 @@ class Database:
                 new_rows.append(
                     incoming.iloc[[inc_idx]].drop(columns=["_merge_key"])  # type: ignore[index]
                 )
-        if conflicts:
-            seen_keys: set[str] = set()
-            unique_conflicts: list[dict[str, Any]] = []
-            for c in conflicts:
-                key = "|".join(str(c.get(col, "")) for col in _MERGE_KEY_COLUMNS)
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    unique_conflicts.append(c)
-            display_conflicts = (
-                unique_conflicts[:max_conflict_display]
-                if max_conflict_display > 0
-                else []
-            )
-            total_conflicts = len(unique_conflicts)
-            conflict_msgs = [_format_row_for_display(c) for c in display_conflicts]
-            conflict_detail = chr(10).join(conflict_msgs)
-            if total_conflicts > max_conflict_display > 0:
-                remaining = total_conflicts - max_conflict_display
-                conflict_detail += f"{chr(10)}  ... and {remaining} more conflicts."
-            suffix = "y" if total_conflicts == 1 else "ies"
-            prefix = "y has" if total_conflicts == 1 else "ies have"
-            msg = (
-                f"Merge conflict detected for {total_conflicts} entr{suffix}. "
-                f"The following entr{prefix} the same "
-                "start_time, end_time, and activity "
-                f"but conflicting non-blank values:{chr(10)}{conflict_detail}"
-            )
-            raise MergeConflictError(msg, unique_conflicts)
+                new_count += 1
         result = existing.drop(columns=["_merge_key"])
         if new_rows:
             new_concat = pd.concat(new_rows, ignore_index=True)

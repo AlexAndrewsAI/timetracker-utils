@@ -97,7 +97,7 @@ warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=timetracker_utils --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=timetracker_utils --cov-report=term-missing --cov-fail-under=95"
 
 [tool.coverage.run]
 source = ["timetracker_utils"]

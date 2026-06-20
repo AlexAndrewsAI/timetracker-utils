@@ -253,28 +253,25 @@ def _compute_hours(start_time: object, end_time: object) -> str:
 
 
 @app.command()
-def timecop(
+def add(
     config: Path = typer.Option(
         ..., "--config", "-c", help="Path to the YAML configuration file."
     ),
-    input: Path = typer.Option(
-        None, "--input", "-i", help="Path to the CSV file to load."
+    format: str = typer.Option(
+        ..., "--format", "-f", help="Format of the input file (timecop or stt)."
     ),
+    input_file: Path = typer.Argument(..., help="Path to the CSV file to load."),
     head: int = typer.Option(100, "--head", "-h", help="Rows to display."),
-    output: Path = typer.Option(
-        None, "--output", "-o", help="Path to export database as TimeCop CSV."
-    ),
 ) -> None:
-    """Load, display, and export TimeCop CSV data."""
+    """Load CSV data into the database."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(config)
 
-    if input is not None:
+    if format == "timecop":
         try:
-            cop = TimeCop()
-            cop.read_csv(input)
+            cop = TimeCop(default_timezone=cfg.timezone)
+            cop.read_csv(input_file)
         except ValueError as exc:
-            # Emit a clear error message for the user and exit with non-zero code.
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
         db = Database()
@@ -283,63 +280,10 @@ def timecop(
         )
         typer.echo(f"Loaded DataFrame ({len(cop.entries)} rows total):")
         display_df = cop.entries.copy()
-        if not display_df.empty:
-            if "start_time" in display_df.columns:
-                display_df["start_time"] = convert_column_tz(
-                    display_df["start_time"], cfg.timezone
-                )
-            if "end_time" in display_df.columns:
-                display_df["end_time"] = convert_column_tz(
-                    display_df["end_time"], cfg.timezone
-                )
-        with pd.option_context(
-            "display.max_columns",
-            None,
-            "display.max_colwidth",
-            None,
-            "display.width",
-            None,
-        ):
-            typer.echo(str(display_df.head(head)))
-
-    if output is not None:
-        db = Database()
-        db_entries = db.read(cfg.database)
-        if db_entries.empty:
-            typer.echo("Database is empty, writing header-only CSV.")
-        else:
-            typer.echo(f"Exporting {len(db_entries)} entries to {output}")
-        _format_timecop_csv(db_entries, output, cfg.timezone)
-
-    if input is None and output is None:
-        typer.echo(
-            "No --input or --output specified.",
-            err=True,
-        )
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def stt(
-    config: Path = typer.Option(
-        ..., "--config", "-c", help="Path to the YAML configuration file."
-    ),
-    input: Path = typer.Option(
-        None, "--input", "-i", help="Path to the STT-format CSV file to load."
-    ),
-    head: int = typer.Option(100, "--head", "-h", help="Rows to display."),
-    output: Path = typer.Option(
-        None, "--output", "-o", help="Path to export database as STT-format CSV."
-    ),
-) -> None:
-    """Load, display, and export SimpleTimeTracker CSV data."""
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    cfg = load_config(config)
-
-    if input is not None:
+    elif format == "stt":
         try:
-            tracker = SimpleTimeTracker()
-            tracker.read_csv(input)
+            tracker = SimpleTimeTracker(default_timezone=cfg.timezone)
+            tracker.read_csv(input_file)
         except ValueError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
@@ -349,39 +293,58 @@ def stt(
         )
         typer.echo(f"Loaded DataFrame ({len(tracker.entries)} rows total):")
         display_df = tracker.entries.copy()
-        if not display_df.empty:
-            if "start_time" in display_df.columns:
-                display_df["start_time"] = convert_column_tz(
-                    display_df["start_time"], cfg.timezone
-                )
-            if "end_time" in display_df.columns:
-                display_df["end_time"] = convert_column_tz(
-                    display_df["end_time"], cfg.timezone
-                )
-        with pd.option_context(
-            "display.max_columns",
-            None,
-            "display.max_colwidth",
-            None,
-            "display.width",
-            None,
-        ):
-            typer.echo(str(display_df.head(head)))
+    else:
+        typer.echo(f"Unknown format: {format}. Use 'timecop' or 'stt'.", err=True)
+        raise typer.Exit(code=1)
 
-    if output is not None:
-        db = Database()
-        db_entries = db.read(cfg.database)
-        if db_entries.empty:
-            typer.echo("Database is empty, writing header-only CSV.")
-        else:
-            typer.echo(f"Exporting {len(db_entries)} entries to {output}")
-        _format_simple_csv(db_entries, output, cfg.timezone)
+    if not display_df.empty:
+        if "start_time" in display_df.columns:
+            display_df["start_time"] = convert_column_tz(
+                display_df["start_time"], cfg.timezone
+            )
+        if "end_time" in display_df.columns:
+            display_df["end_time"] = convert_column_tz(
+                display_df["end_time"], cfg.timezone
+            )
+    with pd.option_context(
+        "display.max_columns",
+        None,
+        "display.max_colwidth",
+        None,
+        "display.width",
+        None,
+    ):
+        typer.echo(str(display_df.head(head)))
 
-    if input is None and output is None:
-        typer.echo(
-            "No --input or --output specified.",
-            err=True,
-        )
+
+@app.command()
+def export(
+    config: Path = typer.Option(
+        ..., "--config", "-c", help="Path to the YAML configuration file."
+    ),
+    format: str = typer.Option(
+        ..., "--format", "-f", help="Format of the output file (timecop or stt)."
+    ),
+    output_file: Path = typer.Argument(..., help="Path to export database as CSV."),
+) -> None:
+    """Export database data to CSV."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    cfg = load_config(config)
+
+    db = Database()
+    db_entries = db.read(cfg.database)
+
+    if db_entries.empty:
+        typer.echo("Database is empty, writing header-only CSV.")
+    else:
+        typer.echo(f"Exporting {len(db_entries)} entries to {output_file}")
+
+    if format == "timecop":
+        _format_timecop_csv(db_entries, output_file, cfg.timezone)
+    elif format == "stt":
+        _format_simple_csv(db_entries, output_file, cfg.timezone)
+    else:
+        typer.echo(f"Unknown format: {format}. Use 'timecop' or 'stt'.", err=True)
         raise typer.Exit(code=1)
 
 

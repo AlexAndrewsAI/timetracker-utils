@@ -7,11 +7,11 @@ Simple Time Tracker CSV export format.
 import csv
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, ClassVar, cast
 
 import pandas as pd
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from timetracker_utils.base_tracker import BaseTimeEntry, BaseTimeTracker
 
@@ -79,27 +79,49 @@ class SimpleTimeEntry(BaseTimeEntry):
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
-    def parse_datetime(cls, value: str | None) -> datetime | None:
+    def parse_datetime(
+        cls, value: str | None, info: ValidationInfo | None = None
+    ) -> datetime | None:
         """Parse datetime from string or return existing datetime.
 
-        Timezone policy: For Simple Time Tracker format, if no explicit timezone
-        is specified in the input string, the datetime is kept as naive (treated
-        as local/config timezone). If an explicit timezone is present (e.g., 'Z',
-        '+00:00', or offset), it is preserved. This differs from BaseTimeEntry
-        which normalizes all datetimes to UTC.
+        Timezone policy: If the datetime string has an explicit timezone
+        (Z, +00:00, -04:00, etc.), it is converted to UTC. If no timezone is
+        specified, the timezone from the config is assumed and then converted
+        to UTC. This ensures consistent UTC representation in the database.
         """
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
-            return value
+            if value.tzinfo is None:
+                # Naive datetime: assume config timezone and convert to UTC
+                default_tz = (
+                    info.context.get("default_timezone", "UTC")
+                    if info and info.context
+                    else "UTC"
+                )
+                from timetracker_utils.datetime_utils import resolve_tz
+
+                zone = resolve_tz(default_tz)
+                if zone is not None:
+                    return value.replace(tzinfo=zone).astimezone(timezone.utc)
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
         try:
             dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            # For STT format: if no timezone is specified, keep the value
-            # as naive (treat it as local / config timezone).
-            has_explicit_tz = "Z" in value or (value.count("-") > 2 or "+" in value)
-            if not has_explicit_tz:
-                return dt.replace(tzinfo=None)
-            return dt
+            if dt.tzinfo is None:
+                # Naive datetime string: assume config timezone and convert to UTC
+                default_tz = (
+                    info.context.get("default_timezone", "UTC")
+                    if info and info.context
+                    else "UTC"
+                )
+                from timetracker_utils.datetime_utils import resolve_tz
+
+                zone = resolve_tz(default_tz)
+                if zone is not None:
+                    return dt.replace(tzinfo=zone).astimezone(timezone.utc)
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
         except (ValueError, TypeError) as exc:
             msg = f"Invalid datetime value: {value!r}"
             raise ValueError(msg) from exc

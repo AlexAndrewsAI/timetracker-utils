@@ -404,9 +404,10 @@ def test_database_write_with_update(tmp_path: Path) -> None:
 
 
 def test_merge_conflict_error() -> None:
-    """Test MergeConflictError creation (lines 38-40)."""
+    """Test MergeConflictError class (kept for backward compatibility)."""
     from timetracker_utils.database import MergeConflictError
 
+    # Test that the class can still be instantiated (for backward compatibility)
     err = MergeConflictError(
         "test conflict",
         [{"date": "1/15/2200", "notes": "conflict"}],
@@ -414,3 +415,271 @@ def test_merge_conflict_error() -> None:
     assert str(err) == "test conflict"
     assert len(err.conflicts) == 1
     assert err.conflicts[0]["date"] == "1/15/2200"
+
+
+def test_activity_entry_parse_datetime_none() -> None:
+    """Test ActivityEntry.parse_datetime with None returns None (line 45)."""
+    result = ActivityEntry.parse_datetime(None)
+    assert result is None
+
+
+def test_activity_entry_parse_datetime_empty_string() -> None:
+    """Test ActivityEntry.parse_datetime with empty string returns None (line 45)."""
+    result = ActivityEntry.parse_datetime("")
+    assert result is None
+
+
+def test_activity_entry_parse_datetime_datetime_object() -> None:
+    """Test ActivityEntry.parse_datetime with datetime object (line 46-47)."""
+    dt = datetime(2200, 1, 15, 9, 0, 0)
+    result = ActivityEntry.parse_datetime(dt)
+    assert result == dt
+
+
+def test_activity_entry_parse_datetime_valid_string() -> None:
+    """Test ActivityEntry.parse_datetime with valid ISO string (lines 48-51)."""
+    result = ActivityEntry.parse_datetime("2200-01-15T09:00:00")
+    assert result == datetime(2200, 1, 15, 9, 0, 0)
+
+
+def test_activity_entry_parse_datetime_z_string() -> None:
+    """Test ActivityEntry.parse_datetime with Z suffix (line 50)."""
+    from datetime import timezone
+
+    result = ActivityEntry.parse_datetime("2200-01-15T09:00:00Z")
+    # Z suffix creates UTC datetime
+    assert result == datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+
+
+def test_activity_entry_parse_datetime_invalid_string() -> None:
+    """Test ActivityEntry.parse_datetime with invalid string raises ValueError."""
+    with pytest.raises(ValueError, match="Invalid datetime value"):
+        ActivityEntry.parse_datetime("not-a-datetime")
+
+
+def test_activity_entry_parse_datetime_invalid_type() -> None:
+    """Test ActivityEntry.parse_datetime with invalid type raises TypeError."""
+    with pytest.raises(TypeError, match="Invalid datetime type"):
+        ActivityEntry.parse_datetime(12345)
+
+
+def test_try_json_loads_valid_json() -> None:
+    """Test _try_json_loads with valid JSON returns True."""
+    from timetracker_utils.database import _try_json_loads
+
+    assert _try_json_loads('["cat1", "cat2"]') is True
+
+
+def test_try_json_loads_invalid_json() -> None:
+    """Test _try_json_loads with invalid JSON returns False (lines 110-111)."""
+    from timetracker_utils.database import _try_json_loads
+
+    assert _try_json_loads("not-json") is False
+
+
+def test_try_json_loads_value_error() -> None:
+    """Test _try_json_loads with value error returns False (line 110)."""
+    from timetracker_utils.database import _try_json_loads
+
+    assert _try_json_loads("") is False
+
+
+def test_try_json_loads_type_error() -> None:
+    """Test _try_json_loads with type error returns False (line 110)."""
+    from timetracker_utils.database import _try_json_loads
+
+    assert _try_json_loads(None) is False
+
+
+def test_format_row_for_display() -> None:
+    """Test _format_row_for_display formats row correctly (lines 115-127)."""
+    from timetracker_utils.database import _format_row_for_display
+
+    row = {
+        "date": "1/15/2200",
+        "activity": "Test",
+        "start_time": "2200-01-15T09:00:00",
+        "end_time": "2200-01-15T10:00:00",
+        "notes": "note",
+        "categories": ["cat1"],
+        "tags": ["tag1"],
+    }
+    result = _format_row_for_display(row)
+    assert "date='1/15/2200'" in result
+    assert "activity='Test'" in result
+
+
+def test_database_is_blank_fill_new_is_na() -> None:
+    """Test _is_blank_fill returns False when new value is NaN (line 296-297)."""
+    import numpy as np
+
+    old = pd.Series(
+        {"date": "1/15/2200", "notes": "existing", "categories": [], "tags": []}
+    )
+    new = pd.Series(
+        {"date": "1/15/2200", "notes": np.nan, "categories": [], "tags": []}
+    )
+    assert not Database._is_blank_fill(old, new)
+
+
+def test_database_merge_nan_key_value() -> None:
+    """Test _merge_dataframes handles NaN in key columns (line 327)."""
+    import numpy as np
+
+    existing = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["A"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": [""],
+            "categories": [""],
+            "tags": [""],
+        }
+    )
+    incoming = pd.DataFrame(
+        {
+            "date": ["1/16/2200"],
+            "activity": [np.nan],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": [""],
+            "categories": [""],
+            "tags": [""],
+        }
+    )
+    _result, new_count, _skipped, _updated = Database._merge_dataframes(
+        existing, incoming, 100
+    )
+    assert new_count == 1
+
+
+def test_database_merge_new_rows_added() -> None:
+    """Test _merge_dataframes adds new rows when no match (lines 348-352)."""
+    existing = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["A"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": [""],
+            "categories": [""],
+            "tags": [""],
+        }
+    )
+    incoming = pd.DataFrame(
+        {
+            "date": ["1/16/2200"],
+            "activity": ["B"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": [""],
+            "categories": [""],
+            "tags": [""],
+        }
+    )
+    result, new_count, _skipped, _updated = Database._merge_dataframes(
+        existing, incoming, 100
+    )
+    assert new_count == 1
+    assert len(result) == 2
+
+
+def test_database_merge_unresolved_treats_as_new() -> None:
+    """Test _merge_dataframes treats unresolved as new (lines 370-373)."""
+    existing = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["A"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": ["old"],
+            "categories": ["cat1"],
+            "tags": [""],
+        }
+    )
+    incoming = pd.DataFrame(
+        {
+            "date": [""],  # blank - no non-blank mergeable values
+            "activity": ["A"],
+            "start_time": ["09:00"],  # Same key
+            "end_time": ["10:00"],
+            "notes": [""],  # blank
+            "categories": [""],  # blank
+            "tags": [""],  # blank
+        }
+    )
+    # This will treat as new since incoming has no non-blank mergeable values
+    # and rows are not identical (existing has non-blank values)
+    result, new_count, skipped, updated = Database._merge_dataframes(
+        existing, incoming, 100
+    )
+    # Should treat as new since no non-blank values to update
+    assert new_count == 1
+    assert updated == 0
+    assert skipped == 0
+    assert len(result) == 2
+
+
+def test_database_merge_conflict_updates() -> None:
+    """Test _merge_dataframes updates with new values on conflict."""
+    existing = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["A"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": ["note1"],
+            "categories": ["cat1"],
+            "tags": ["tag1"],
+        }
+    )
+    incoming = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["A"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": ["note2"],
+            "categories": ["cat2"],
+            "tags": ["tag2"],
+        }
+    )
+    # The implementation updates with new values rather than raising conflicts
+    result, _new_count, _skipped, updated = Database._merge_dataframes(
+        existing, incoming, 100
+    )
+    # It updates with new non-blank values
+    assert updated == 1
+    assert result.iloc[0]["notes"] == "note2"
+
+
+def test_database_merge_concat_new_rows() -> None:
+    """Test _merge_dataframes concatenates new rows (lines 407-408)."""
+    existing = pd.DataFrame(
+        {
+            "date": ["1/15/2200"],
+            "activity": ["A"],
+            "start_time": ["09:00"],
+            "end_time": ["10:00"],
+            "notes": [""],
+            "categories": [""],
+            "tags": [""],
+        }
+    )
+    incoming = pd.DataFrame(
+        {
+            "date": ["1/16/2200", "1/17/2200"],
+            "activity": ["B", "C"],
+            "start_time": ["09:00", "10:00"],
+            "end_time": ["10:00", "11:00"],
+            "notes": ["", ""],
+            "categories": ["", ""],
+            "tags": ["", ""],
+        }
+    )
+    result, new_count, _skipped, _updated = Database._merge_dataframes(
+        existing, incoming, 100
+    )
+    assert new_count == 2
+    assert len(result) == 3

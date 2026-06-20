@@ -13,7 +13,14 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pandas as pd
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 warnings.filterwarnings(
     "ignore",
@@ -114,24 +121,57 @@ class BaseTimeEntry(BaseModel):
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
-    def parse_datetime(cls, value: str | None) -> datetime | None:
+    def parse_datetime(
+        cls, value: str | None, info: ValidationInfo | None = None
+    ) -> datetime | None:
         """Parse a datetime string or return None for empty values.
 
-        Timezone policy: Naive datetime objects are treated as UTC by adding
-        timezone.utc. Timezone-aware datetimes are converted to UTC. This ensures
-        consistent UTC representation in the database and merge operations.
+        Timezone policy: If the datetime string has an explicit timezone
+        (Z, +00:00, -04:00, etc.), it is converted to UTC. If no timezone is
+        specified, the timezone from the config is assumed and then converted
+        to UTC. This ensures consistent UTC representation in the database.
+
+        Args:
+            value: The datetime string or datetime object to parse.
+            info: Pydantic validation info containing context data.
+
+        Returns:
+            A timezone-aware datetime in UTC, or None for empty values.
+
         """
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
             if value.tzinfo is None:
+                # Naive datetime: assume config timezone and convert to UTC
+                default_tz = (
+                    info.context.get("default_timezone", "UTC")
+                    if info and info.context
+                    else "UTC"
+                )
+                from timetracker_utils.datetime_utils import resolve_tz
+
+                zone = resolve_tz(default_tz)
+                if zone is not None:
+                    return value.replace(tzinfo=zone).astimezone(timezone.utc)
                 return value.replace(tzinfo=timezone.utc)
             return value.astimezone(timezone.utc)
         try:
             dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
+                # Naive datetime string: assume config timezone and convert to UTC
+                default_tz = (
+                    info.context.get("default_timezone", "UTC")
+                    if info and info.context
+                    else "UTC"
+                )
+                from timetracker_utils.datetime_utils import resolve_tz
+
+                zone = resolve_tz(default_tz)
+                if zone is not None:
+                    return dt.replace(tzinfo=zone).astimezone(timezone.utc)
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
         except (ValueError, TypeError) as exc:
             msg = f"Invalid datetime value: {value!r}"
             raise ValueError(msg) from exc
@@ -205,9 +245,16 @@ class BaseTimeTracker:
     _ENTRY_CLASS: ClassVar[type[BaseTimeEntry]] = BaseTimeEntry
     _GROUPBY_FIELD: ClassVar[str] = "activity"
 
-    def __init__(self) -> None:
-        """Initialize the tracker with an empty DataFrame."""
+    def __init__(self, default_timezone: str = "UTC") -> None:
+        """Initialize the tracker with an empty DataFrame.
+
+        Args:
+            default_timezone: The timezone to assume for naive datetime strings
+                (e.g., "ET", "PT", "UTC"). Defaults to "UTC".
+
+        """
         self.entries: pd.DataFrame = pd.DataFrame()
+        self.default_timezone: str = default_timezone
 
     def read_csv(self, path: str | Path) -> pd.DataFrame:
         """Read a CSV file and return a DataFrame of parsed time entries."""
@@ -241,7 +288,12 @@ class BaseTimeTracker:
                     "Extra columns in CSV that will be ignored: %s",
                     sorted(extra_cols),
                 )
-        validated_entries = [self._ENTRY_CLASS.model_validate(row) for row in reader]
+        validated_entries = [
+            self._ENTRY_CLASS.model_validate(
+                row, context={"default_timezone": self.default_timezone}
+            )
+            for row in reader
+        ]
         if validated_entries:
             self.entries = pd.DataFrame(
                 [entry.model_dump() for entry in validated_entries]
