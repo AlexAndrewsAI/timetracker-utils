@@ -333,7 +333,7 @@ def test_format_datetime_iso() -> None:
     """Test _format_datetime_iso helper function."""
     from datetime import datetime, timedelta, timezone
 
-    from timetracker_utils.cli import _format_datetime_iso
+    from timetracker_utils.csv_formatters import _format_datetime_iso
 
     # None input
     assert _format_datetime_iso(None) == ""
@@ -354,7 +354,7 @@ def test_format_datetime_iso() -> None:
 
 def test_format_datetime_iso_unparseable_string() -> None:
     """Test _format_datetime_iso with an unparseable string (hits except branch)."""
-    from timetracker_utils.cli import _format_datetime_iso
+    from timetracker_utils.csv_formatters import _format_datetime_iso
 
     # Unparseable string should return as-is
     result = _format_datetime_iso("not-a-date")
@@ -365,7 +365,7 @@ def test_format_datetime_iso_naive_datetime() -> None:
     """Test _format_datetime_iso with a naive datetime (hits tzinfo is None branch)."""
     from datetime import datetime
 
-    from timetracker_utils.cli import _format_datetime_iso
+    from timetracker_utils.csv_formatters import _format_datetime_iso
 
     dt = datetime(2200, 1, 15, 9, 0, 0)  # No tzinfo
     result = _format_datetime_iso(dt)
@@ -375,7 +375,7 @@ def test_format_datetime_iso_naive_datetime() -> None:
 
 def test_format_datetime_iso_non_datetime_type() -> None:
     """Test _format_datetime_iso with a non-datetime, non-string type (hits else branch)."""
-    from timetracker_utils.cli import _format_datetime_iso
+    from timetracker_utils.csv_formatters import _format_datetime_iso
 
     # Integer input hits the else: return str(val) branch
     result = _format_datetime_iso(42)
@@ -384,7 +384,7 @@ def test_format_datetime_iso_non_datetime_type() -> None:
 
 def test_compute_hours() -> None:
     """Test _compute_hours helper function."""
-    from timetracker_utils.cli import _compute_hours
+    from timetracker_utils.csv_formatters import _compute_hours
 
     # None values
     assert _compute_hours(None, None) == ""
@@ -399,7 +399,7 @@ def test_compute_hours() -> None:
 
 def test_compute_hours_empty_string() -> None:
     """Test _compute_hours with empty string start/end times."""
-    from timetracker_utils.cli import _compute_hours
+    from timetracker_utils.csv_formatters import _compute_hours
 
     # Empty start time
     assert _compute_hours("", "2200-01-15T11:30:00.000Z") == ""
@@ -411,7 +411,7 @@ def test_compute_hours_datetime_objects() -> None:
     """Test _compute_hours with datetime objects (hits isinstance(datetime) branch)."""
     from datetime import datetime, timezone
 
-    from timetracker_utils.cli import _compute_hours
+    from timetracker_utils.csv_formatters import _compute_hours
 
     start = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
     end = datetime(2200, 1, 15, 11, 30, 0, tzinfo=timezone.utc)
@@ -421,7 +421,7 @@ def test_compute_hours_datetime_objects() -> None:
 
 def test_compute_hours_invalid_string() -> None:
     """Test _compute_hours with invalid time string (hits except branch)."""
-    from timetracker_utils.cli import _compute_hours
+    from timetracker_utils.csv_formatters import _compute_hours
 
     # Invalid string should be caught by ValueError from fromisoformat
     result = _compute_hours("not-a-date", "2200-01-15T11:30:00.000Z")
@@ -430,7 +430,7 @@ def test_compute_hours_invalid_string() -> None:
 
 def test_compute_hours_non_datetime_type() -> None:
     """Test _compute_hours with non-datetime, non-string types."""
-    from timetracker_utils.cli import _compute_hours
+    from timetracker_utils.csv_formatters import _compute_hours
 
     # Integer types hit the elif isinstance(x, datetime) else branch and return ""
     _compute_hours(100, 200)
@@ -475,28 +475,28 @@ def test_format_simple_csv_with_data(tmp_path: Path) -> None:
 
 def test_format_simple_datetime_none() -> None:
     """Test _format_simple_datetime with None."""
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     assert _format_simple_datetime(None) == ""
 
 
 def test_format_simple_datetime_empty_string() -> None:
     """Test _format_simple_datetime with empty string."""
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     assert _format_simple_datetime("") == ""
 
 
 def test_format_simple_datetime_whitespace_string() -> None:
     """Test _format_simple_datetime with whitespace string."""
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     assert _format_simple_datetime("   ") == ""
 
 
 def test_format_simple_datetime_iso_string() -> None:
     """Test _format_simple_datetime with an ISO string."""
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     result = _format_simple_datetime("2200-01-15T09:00:00.000Z")
     assert "2200-01-15T09:00:00" in result
@@ -504,7 +504,7 @@ def test_format_simple_datetime_iso_string() -> None:
 
 def test_format_simple_datetime_unparseable_string() -> None:
     """Test _format_simple_datetime with unparseable string returns as-is."""
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     result = _format_simple_datetime("not-a-date")
     assert result == "not-a-date"
@@ -512,7 +512,7 @@ def test_format_simple_datetime_unparseable_string() -> None:
 
 def test_format_simple_datetime_non_datetime_non_string() -> None:
     """Test _format_simple_datetime with non-datetime, non-string type."""
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     result = _format_simple_datetime(42)
     assert result == "42"
@@ -520,7 +520,7 @@ def test_format_simple_datetime_non_datetime_non_string() -> None:
 
 def test_compute_simple_duration_none_values() -> None:
     """Test _compute_simple_duration with None values."""
-    from timetracker_utils.cli import _compute_simple_duration
+    from timetracker_utils.csv_formatters import _compute_simple_duration
 
     result = _compute_simple_duration(None, None)
     assert result == ("", "")
@@ -528,7 +528,7 @@ def test_compute_simple_duration_none_values() -> None:
 
 def test_compute_simple_duration_none_start() -> None:
     """Test _compute_simple_duration with None start time."""
-    from timetracker_utils.cli import _compute_simple_duration
+    from timetracker_utils.csv_formatters import _compute_simple_duration
 
     result = _compute_simple_duration(None, "2200-01-15T11:30:00.000Z")
     assert result == ("", "")
@@ -536,7 +536,7 @@ def test_compute_simple_duration_none_start() -> None:
 
 def test_compute_simple_duration_valid_strings() -> None:
     """Test _compute_simple_duration with valid ISO strings."""
-    from timetracker_utils.cli import _compute_simple_duration
+    from timetracker_utils.csv_formatters import _compute_simple_duration
 
     result = _compute_simple_duration(
         "2200-01-15T09:00:00.000Z", "2200-01-15T11:30:00.000Z"
@@ -546,7 +546,7 @@ def test_compute_simple_duration_valid_strings() -> None:
 
 def test_compute_simple_duration_mixed_types() -> None:
     """Test _compute_simple_duration with start as string and end as non-datetime."""
-    from timetracker_utils.cli import _compute_simple_duration
+    from timetracker_utils.csv_formatters import _compute_simple_duration
 
     result = _compute_simple_duration("2200-01-15T09:00:00.000Z", 42)
     assert result == ("", "")
@@ -554,7 +554,7 @@ def test_compute_simple_duration_mixed_types() -> None:
 
 def test_compute_hours_end_non_datetime_non_string() -> None:
     """Test _compute_hours with non-datetime, non-string end time (line 249)."""
-    from timetracker_utils.cli import _compute_hours
+    from timetracker_utils.csv_formatters import _compute_hours
 
     result = _compute_hours("2200-01-15T09:00:00.000Z", 42)
     assert result == ""
@@ -755,7 +755,7 @@ def test_stt_command_invalid_csv(tmp_path: Path) -> None:
 
 def test_compute_simple_duration_non_datetime_types() -> None:
     """Test _compute_simple_duration with non-datetime types."""
-    from timetracker_utils.cli import _compute_simple_duration
+    from timetracker_utils.csv_formatters import _compute_simple_duration
 
     result = _compute_simple_duration(100, 200)
     assert result == ("", "")
@@ -763,7 +763,7 @@ def test_compute_simple_duration_non_datetime_types() -> None:
 
 def test_compute_simple_duration_invalid_string() -> None:
     """Test _compute_simple_duration with invalid string."""
-    from timetracker_utils.cli import _compute_simple_duration
+    from timetracker_utils.csv_formatters import _compute_simple_duration
 
     result = _compute_simple_duration("not-a-date", "2200-01-15T11:30:00.000Z")
     assert result == ("", "")
@@ -773,7 +773,7 @@ def test_format_simple_datetime_naive_datetime() -> None:
     """Test _format_simple_datetime with naive datetime."""
     from datetime import datetime
 
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     dt = datetime(2200, 1, 15, 9, 0, 0)  # No tzinfo
     result = _format_simple_datetime(dt)
@@ -784,7 +784,7 @@ def test_format_simple_datetime_target_tz() -> None:
     """Test _format_simple_datetime with a target timezone."""
     from datetime import datetime, timezone
 
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
     result = _format_simple_datetime(dt, target_tz="ET")
@@ -796,7 +796,7 @@ def test_format_simple_datetime_resolve_tz_fails() -> None:
     """Test _format_simple_datetime when resolve_tz returns None."""
     from datetime import datetime, timezone
 
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     dt = datetime(2200, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
     result = _format_simple_datetime(dt, target_tz="XZ")
@@ -890,6 +890,15 @@ def _add_entries_to_db(tmp_path: Path) -> tuple[Path, str]:
             '["analysis", "data"]',
             '["urgent"]',
         ),
+        (
+            "1/16/2200",
+            "StellarCartography",
+            "2200-01-16T10:00:00+00:00",
+            "2200-01-16T12:00:00+00:00",
+            "star charts",
+            '["nebula"]',
+            '["space"]',
+        ),
     ]
     conn.executemany(
         "INSERT INTO activities VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -936,7 +945,7 @@ def test_report_command_no_entries_date(tmp_path: Path) -> None:
     """Test the report command when no entries exist for the date."""
     config_path, _ = _add_entries_to_db(tmp_path)
     result = runner.invoke(
-        app, ["report", "--config", str(config_path), "--date", "2200-01-16"]
+        app, ["report", "--config", str(config_path), "--date", "2200-01-20"]
     )
     assert result.exit_code != 0
     assert "No entries found" in result.output
@@ -980,7 +989,7 @@ def test_format_simple_datetime_utcoffset_none() -> None:
     """
     from datetime import datetime, tzinfo
 
-    from timetracker_utils.cli import _format_simple_datetime
+    from timetracker_utils.csv_formatters import _format_simple_datetime
 
     class NoUTCOffsetTZ(tzinfo):
         def utcoffset(self, _dt: datetime | None) -> None:
@@ -1007,7 +1016,7 @@ def test_format_datetime_iso_utcoffset_none() -> None:
     """
     from datetime import datetime, tzinfo
 
-    from timetracker_utils.cli import _format_datetime_iso
+    from timetracker_utils.csv_formatters import _format_datetime_iso
 
     class NoUTCOffsetTZ(tzinfo):
         def utcoffset(self, _dt: datetime | None) -> None:
@@ -1023,3 +1032,261 @@ def test_format_datetime_iso_utcoffset_none() -> None:
     result = _format_datetime_iso(dt, target_tz="XZ")
     assert "+00:00" in result
     assert "2200-01-15T09:00:00" in result
+
+
+# --- _parse_date_arg tests ---
+
+
+def test_parse_date_arg_single() -> None:
+    """Test _parse_date_arg with a single date."""
+    from datetime import date as date_type
+
+    from timetracker_utils.cli import _parse_date_arg
+
+    result = _parse_date_arg("2200-01-15")
+    assert result == date_type(2200, 1, 15)
+
+
+def test_parse_date_arg_range() -> None:
+    """Test _parse_date_arg with a date range."""
+    from datetime import date as date_type
+
+    from timetracker_utils.cli import _parse_date_arg
+
+    result = _parse_date_arg("2200-01-15:2200-01-16")
+    assert result == (date_type(2200, 1, 15), date_type(2200, 1, 16))
+
+
+def test_parse_date_arg_invalid_single() -> None:
+    """Test _parse_date_arg with an invalid single date raises ValueError."""
+    from timetracker_utils.cli import _parse_date_arg
+
+    with pytest.raises(ValueError, match="Invalid date format"):
+        _parse_date_arg("not-a-date")
+
+
+def test_parse_date_arg_invalid_range() -> None:
+    """Test _parse_date_arg with an invalid range raises ValueError."""
+    from timetracker_utils.cli import _parse_date_arg
+
+    with pytest.raises(ValueError, match="Invalid date range format"):
+        _parse_date_arg("not-a-date:2200-01-16")
+
+
+def test_parse_date_arg_start_after_end() -> None:
+    """Test _parse_date_arg with start > end raises ValueError."""
+    from timetracker_utils.cli import _parse_date_arg
+
+    with pytest.raises(ValueError, match="after end date"):
+        _parse_date_arg("2200-01-16:2200-01-15")
+
+
+def test_parse_date_arg_too_many_colons() -> None:
+    """Test _parse_date_arg with too many colons raises ValueError."""
+    from timetracker_utils.cli import _parse_date_arg
+
+    with pytest.raises(ValueError, match="Invalid date format"):
+        _parse_date_arg("2200-01-15:2200-01-16:2200-01-17")
+
+
+# --- Range report tests ---
+
+
+def test_report_command_range(tmp_path: Path) -> None:
+    """Test the report CLI command with a date range."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-01-15:2200-01-16",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Range Report" in result.output
+    assert "2200-01-15" in result.output
+    assert "2200-01-16" in result.output
+    # Range totals should include both days
+    assert "StellarCartography" in result.output
+    assert "DataAnalysis" in result.output
+    # Daily breakdowns should appear
+    assert "Daily Report" in result.output
+
+
+def test_report_command_range_no_entries(tmp_path: Path) -> None:
+    """Test the report command with a date range that has no entries."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-02-01:2200-02-05",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "No entries found" in result.output
+
+
+def test_report_command_range_invalid_format(tmp_path: Path) -> None:
+    """Test the report command with an invalid range format."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "invalid:range",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Invalid date range format" in result.output
+
+
+def test_report_command_range_start_after_end(tmp_path: Path) -> None:
+    """Test the report command with start date after end date."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-01-16:2200-01-15",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "after end date" in result.output
+
+
+def test_report_command_range_single_day(tmp_path: Path) -> None:
+    """Test the report command with a single-day range (start == end)."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-01-15:2200-01-15",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Range Report" in result.output
+    assert "StellarCartography" in result.output
+
+
+# --- --type / -t option tests ---
+
+
+def test_report_invalid_type(tmp_path: Path) -> None:
+    """Test that an invalid --type value is rejected."""
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-01-15",
+            "--type",
+            "pie",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Invalid report type" in result.output
+
+
+def test_report_type_bar_single(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test --type bar for a single date mocks plt.show so no window opens."""
+    mock_plt, mock_button = _make_mock_plt()
+    monkeypatch.setattr(
+        "timetracker_utils.report._import_matplotlib",
+        lambda: (mock_plt, mock_button),
+    )
+
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-01-15",
+            "--type",
+            "bar",
+        ],
+    )
+    assert result.exit_code == 0
+    mock_plt.show.assert_called()
+
+
+def test_report_type_bar_range(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test --type bar for a date range mocks plt.show so no window opens."""
+    mock_plt, mock_button = _make_mock_plt()
+    monkeypatch.setattr(
+        "timetracker_utils.report._import_matplotlib",
+        lambda: (mock_plt, mock_button),
+    )
+
+    config_path, _ = _add_entries_to_db(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "--config",
+            str(config_path),
+            "--date",
+            "2200-01-15:2200-01-16",
+            "--type",
+            "bar",
+        ],
+    )
+    assert result.exit_code == 0
+    mock_plt.show.assert_called()
+
+
+def _make_mock_plt():
+    """Create mock matplotlib objects for testing bar charts."""
+    import unittest.mock as mock
+
+    mock_plt = mock.MagicMock()
+    mock_fig = mock.MagicMock()
+    mock_ax = mock.MagicMock()
+    mock_bar_container = mock.MagicMock()
+    mock_bar_container.get_width.return_value = 1.0
+    mock_bar_container.get_y.return_value = 0.0
+    mock_bar_container.get_height.return_value = 0.5
+    mock_plt.subplots.return_value = (mock_fig, mock_ax)
+    mock_plt.barh.return_value = [mock_bar_container]
+    mock_plt.show = mock.MagicMock()
+    mock_plt.tight_layout = mock.MagicMock()
+    mock_plt.close = mock.MagicMock()
+
+    mock_button = mock.MagicMock()
+    mock_button.return_value = mock.MagicMock()
+
+    return mock_plt, mock_button
+
+
+def test_import_matplotlib_no_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that _import_matplotlib raises ImportError when no display."""
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    from timetracker_utils.report import _import_matplotlib
+
+    with pytest.raises(ImportError, match="No display server"):
+        _import_matplotlib()

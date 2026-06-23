@@ -3,21 +3,31 @@
 Provides a typer-based CLI for the package.
 """
 
-import csv
 import logging
-from datetime import datetime, timezone
+from datetime import date as date_type
+from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import typer
 
 from timetracker_utils import __version__
 from timetracker_utils.config import load_config
+from timetracker_utils.csv_formatters import (
+    _format_simple_csv,
+    _format_timecop_csv,
+    _seconds_to_hhmm,
+)
 from timetracker_utils.database import Database
-from timetracker_utils.datetime_utils import (
-    aggregate_by_date,
-    convert_column_tz,
-    resolve_tz,
+from timetracker_utils.datetime_utils import aggregate_by_date, convert_column_tz
+from timetracker_utils.report import (
+    _REPORT_TYPES,
+    _parse_date_arg,
+    _print_breakdown,
+    _print_daily_report,
+    _show_bar_range,
+    _show_bar_single,
 )
 from timetracker_utils.simple_time_tracker import SimpleTimeTracker
 from timetracker_utils.time_cop import TimeCop
@@ -49,229 +59,6 @@ def main(
     """Time tracker utilities CLI."""
     _ = TimeCop
     _ = SimpleTimeTracker
-
-
-def _format_timecop_csv(
-    entries: pd.DataFrame, output_path: Path, timezone: str = "UTC"
-) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    header = [
-        "Date",
-        "Project",
-        "Description",
-        "Combined Project & Description",
-        "Start Time",
-        "End Time",
-        "Time (hours)",
-        "Notes",
-    ]
-    if entries.empty:
-        with output_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-            writer.writerow(header)
-        return
-    with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-        writer.writerow(header)
-        for _, row in entries.iterrows():
-            date = str(row.get("date", ""))
-            project = str(row.get("activity", ""))
-            description = str(row.get("categories", [""]))
-            if isinstance(row.get("categories"), list):
-                description = row["categories"][0] if row["categories"] else ""
-            description = str(description)
-            combined = f"{project}: {description}"
-            start_time = row.get("start_time")
-            end_time = row.get("end_time")
-            notes = str(row.get("notes", ""))
-            start_str = _format_datetime_iso(start_time, timezone)
-            end_str = _format_datetime_iso(end_time, timezone)
-            hours_str = _compute_hours(start_time, end_time)
-            writer.writerow(
-                [
-                    date,
-                    project,
-                    description,
-                    combined,
-                    start_str,
-                    end_str,
-                    hours_str,
-                    notes,
-                ]
-            )
-
-
-def _format_simple_csv(
-    entries: pd.DataFrame, output_path: Path, timezone: str = "UTC"
-) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    header = [
-        "activity name",
-        "time started",
-        "time ended",
-        "comment",
-        "categories",
-        "record tags",
-        "duration",
-        "duration minutes",
-    ]
-    if entries.empty:
-        with output_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-            writer.writerow(header)
-        return
-    with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-        writer.writerow(header)
-        for _, row in entries.iterrows():
-            activity = str(row.get("activity", ""))
-            start_time = row.get("start_time")
-            end_time = row.get("end_time")
-            notes = str(row.get("notes", ""))
-            categories = row.get("categories", [])
-            if isinstance(categories, list):
-                categories_str = ", ".join(categories)
-            else:
-                categories_str = str(categories)
-            tags = row.get("tags", [])
-            tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
-            start_str = _format_simple_datetime(start_time, timezone)
-            end_str = _format_simple_datetime(end_time, timezone)
-            duration_str, duration_min_str = _compute_simple_duration(
-                start_time, end_time
-            )
-            writer.writerow(
-                [
-                    activity,
-                    start_str,
-                    end_str,
-                    notes,
-                    categories_str,
-                    tags_str,
-                    duration_str,
-                    duration_min_str,
-                ]
-            )
-
-
-def _format_simple_datetime(val: object, target_tz: str = "UTC") -> str:
-    if val is None or (isinstance(val, str) and val.strip() == ""):
-        return ""
-    if isinstance(val, str):
-        try:
-            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            return val
-    elif isinstance(val, datetime):
-        dt = val
-    else:
-        return str(val)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    zone = resolve_tz(target_tz)
-    if zone is not None:
-        dt = dt.astimezone(zone)
-    base = dt.strftime("%Y-%m-%dT%H:%M:%S")
-    millis = f"{dt.microsecond // 1000:03d}"
-    offset_seconds = dt.utcoffset()
-    if offset_seconds is None:
-        offset = "+00:00"
-    else:
-        total_seconds = int(offset_seconds.total_seconds())
-        sign = "+" if total_seconds >= 0 else "-"
-        total_seconds = abs(total_seconds)
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        offset = f"{sign}{hours:02d}:{minutes:02d}"
-    return f"{base}.{millis}{offset}"
-
-
-def _compute_simple_duration(start_time: object, end_time: object) -> tuple[str, str]:
-    if start_time is None or end_time is None:
-        return "", ""
-    try:
-        if isinstance(start_time, str):
-            start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-        elif isinstance(start_time, datetime):
-            start_dt = start_time
-        else:
-            return "", ""
-        if isinstance(end_time, str):
-            end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-        elif isinstance(end_time, datetime):
-            end_dt = end_time
-        else:
-            return "", ""
-        delta = end_dt - start_dt
-        total_secs = int(delta.total_seconds())
-        hours = total_secs // 3600
-        remainder = total_secs % 3600
-        minutes = remainder // 60
-        seconds = remainder % 60
-        duration_str = f"{hours}:{minutes}:{seconds}"
-        duration_min_str = str(round(hours * 60 + minutes + seconds / 60.0, 4))
-        return duration_str, duration_min_str
-    except (ValueError, TypeError):
-        return "", ""
-
-
-def _format_datetime_iso(val: object, target_tz: str = "UTC") -> str:
-    if val is None or (isinstance(val, str) and val.strip() == ""):
-        return ""
-    if isinstance(val, str):
-        try:
-            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            return val
-    elif isinstance(val, datetime):
-        dt = val
-    else:
-        return str(val)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    zone = resolve_tz(target_tz)
-    if zone is not None:
-        dt = dt.astimezone(zone)
-    base = dt.strftime("%Y-%m-%dT%H:%M:%S")
-    millis = f"{dt.microsecond // 1000:03d}"
-    offset_seconds = dt.utcoffset()
-    if offset_seconds is None:
-        offset = "+00:00"
-    else:
-        total_seconds = int(offset_seconds.total_seconds())
-        sign = "+" if total_seconds >= 0 else "-"
-        total_seconds = abs(total_seconds)
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        offset = f"{sign}{hours:02d}:{minutes:02d}"
-    return f"{base}.{millis}{offset}"
-
-
-def _compute_hours(start_time: object, end_time: object) -> str:
-    if start_time is None or end_time is None:
-        return ""
-    if isinstance(start_time, str) and start_time.strip() == "":
-        return ""
-    if isinstance(end_time, str) and end_time.strip() == "":
-        return ""
-    try:
-        if isinstance(start_time, str):
-            start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-        elif isinstance(start_time, datetime):
-            start_dt = start_time
-        else:
-            return ""
-        if isinstance(end_time, str):
-            end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-        elif isinstance(end_time, datetime):
-            end_dt = end_time
-        else:
-            return ""
-        delta = end_dt - start_dt
-        hours = delta.total_seconds() / 3600.0
-        return f"{hours:.4f}"
-    except (ValueError, TypeError):
-        return ""
 
 
 @app.command()
@@ -370,35 +157,46 @@ def export(
         raise typer.Exit(code=1)
 
 
-def _seconds_to_hhmm(total_seconds: float) -> str:
-    """Convert seconds to hh:mm string format."""
-    total_seconds = max(0.0, total_seconds)
-    hours = int(total_seconds // 3600)
-    minutes = int((total_seconds % 3600) // 60)
-    return f"{hours:02d}:{minutes:02d}"
-
-
 @app.command()
 def report(
     config: Path = typer.Option(
         ..., "--config", "-c", help="Path to the YAML configuration file."
     ),
     date: str = typer.Option(
-        ..., "--date", "-d", help="Date to report on (yyyy-mm-dd format)."
+        ...,
+        "--date",
+        "-d",
+        help="Date or date range to report on (yyyy-mm-dd or yyyy-mm-dd:yyyy-mm-dd).",
+    ),
+    report_type: str = typer.Option(
+        "text",
+        "--type",
+        "-t",
+        help=(
+            "Report output type: 'text' (tables, default) "
+            "or 'bar' (interactive bar charts)."
+        ),
     ),
 ) -> None:
     """Show a daily report of activities, tags, and categories.
 
-    Aggregates total time (in hh:mm) and displays tables for activities,
-    tags, and categories for the specified date.
+    Aggregates total time and displays breakdowns for the specified date
+    or date range. Use --type bar for interactive matplotlib bar charts.
     """
+    if report_type not in _REPORT_TYPES:
+        typer.echo(
+            f"Invalid report type: {report_type!r}. Choose from {_REPORT_TYPES}.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(config)
 
     try:
-        report_date = datetime.strptime(date, "%Y-%m-%d").date()
+        parsed = _parse_date_arg(date)
     except ValueError as exc:
-        typer.echo(f"Invalid date format: {date!r}. Use yyyy-mm-dd.", err=True)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
     db = Database()
@@ -408,43 +206,79 @@ def report(
         typer.echo("Database is empty.")
         raise typer.Exit(code=1)
 
-    result = aggregate_by_date(db_entries, report_date, cfg.timezone)
+    if isinstance(parsed, date_type):
+        # Single date
+        report_date = parsed
+        result = aggregate_by_date(db_entries, report_date, cfg.timezone)
+        if result["is_empty"]:
+            typer.echo(f"No entries found for {date}.")
+            raise typer.Exit(code=1)
+        if report_type == "bar":
+            _show_bar_single(report_date, result, cfg.timezone)
+        else:
+            _print_daily_report(report_date, result)
+    else:
+        # Date range
+        start_date, end_date = parsed
+        total_seconds = 0.0
+        total_activity: dict[str, float] = {}
+        total_tags: dict[str, float] = {}
+        total_categories: dict[str, float] = {}
+        daily_results: list[tuple[date_type, dict[str, Any]]] = []
+        any_data = False
 
-    if result["is_empty"]:
-        typer.echo(f"No entries found for {date}.")
-        raise typer.Exit(code=1)
+        current = start_date
+        while current <= end_date:
+            day_result = aggregate_by_date(db_entries, current, cfg.timezone)
+            if not day_result["is_empty"]:
+                any_data = True
+                total_seconds += day_result["total_seconds"]
+                for act, secs in day_result["activity_breakdown"].items():
+                    total_activity[act] = total_activity.get(act, 0.0) + secs
+                for tag, secs in day_result["tag_breakdown"].items():
+                    total_tags[tag] = total_tags.get(tag, 0.0) + secs
+                for cat, secs in day_result["category_breakdown"].items():
+                    total_categories[cat] = total_categories.get(cat, 0.0) + secs
+                daily_results.append((current, day_result))
+            current += timedelta(days=1)
 
-    typer.echo(f"\n{'=' * 50}")
-    typer.echo(f"Daily Report: {report_date.strftime('%A, %B %d, %Y')}")
-    typer.echo(f"{'=' * 50}")
-    typer.echo(f"Total Time: {_seconds_to_hhmm(result['total_seconds'])}\n")
+        if not any_data:
+            typer.echo(f"No entries found for {start_date} to {end_date}.")
+            raise typer.Exit(code=1)
 
-    activity_breakdown = result["activity_breakdown"]
-    if activity_breakdown:
-        typer.echo("-" * 30)
-        typer.echo(f"{'Activity':<20} {'Time':>8}")
-        typer.echo("-" * 30)
-        for activity, secs in sorted(activity_breakdown.items()):
-            typer.echo(f"{activity:<20} {_seconds_to_hhmm(secs):>8}")
-        typer.echo()
+        if report_type == "bar":
+            _show_bar_range(
+                start_date,
+                end_date,
+                total_seconds,
+                total_activity,
+                total_tags,
+                total_categories,
+                daily_results,
+                cfg.timezone,
+            )
+        else:
+            # Print range summary
+            typer.echo(f"\n{'=' * 50}")
+            typer.echo(
+                f"Range Report: {start_date.strftime('%Y-%m-%d')} "
+                f"to {end_date.strftime('%Y-%m-%d')}"
+            )
+            typer.echo(f"{'=' * 50}")
+            typer.echo(f"Total Time: {_seconds_to_hhmm(total_seconds)}\n")
 
-    tag_breakdown = result["tag_breakdown"]
-    if tag_breakdown:
-        typer.echo("-" * 30)
-        typer.echo(f"{'Tag':<20} {'Time':>8}")
-        typer.echo("-" * 30)
-        for tag, secs in sorted(tag_breakdown.items()):
-            typer.echo(f"{tag:<20} {_seconds_to_hhmm(secs):>8}")
-        typer.echo()
+            if total_activity:
+                _print_breakdown("Activity", total_activity, total_seconds)
 
-    category_breakdown = result["category_breakdown"]
-    if category_breakdown:
-        typer.echo("-" * 30)
-        typer.echo(f"{'Category':<20} {'Time':>8}")
-        typer.echo("-" * 30)
-        for category, secs in sorted(category_breakdown.items()):
-            typer.echo(f"{category:<20} {_seconds_to_hhmm(secs):>8}")
-        typer.echo()
+            if total_tags:
+                _print_breakdown("Tag", total_tags, total_seconds)
+
+            if total_categories:
+                _print_breakdown("Category", total_categories, total_seconds)
+
+            # Print daily breakdowns
+            for day_date, day_result in daily_results:
+                _print_daily_report(day_date, day_result)
 
 
 if __name__ == "__main__":
