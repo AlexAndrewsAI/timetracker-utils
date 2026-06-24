@@ -16,6 +16,28 @@ from timetracker_utils.datetime_utils import resolve_tz
 logger = logging.getLogger(__name__)
 
 
+def _parse_datetime_for_duration(val: object) -> datetime | None:
+    """Parse a datetime value for duration calculation.
+
+    Args:
+        val: A datetime string or datetime object.
+
+    Returns:
+        A datetime object, or None if parsing fails.
+
+    """
+    if val is None or (isinstance(val, str) and val.strip() == ""):
+        return None
+    if isinstance(val, str):
+        try:
+            return datetime.fromisoformat(val.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+    elif isinstance(val, datetime):
+        return val
+    return None
+
+
 def _format_datetime_iso(val: object, target_tz: str = "UTC") -> str:
     if val is None or (isinstance(val, str) and val.strip() == ""):
         return ""
@@ -49,38 +71,16 @@ def _format_datetime_iso(val: object, target_tz: str = "UTC") -> str:
 
 
 def _compute_hours(start_time: object, end_time: object) -> str:
-    if start_time is None or end_time is None:
-        return ""
-    if isinstance(start_time, str) and start_time.strip() == "":
-        return ""
-    if isinstance(end_time, str) and end_time.strip() == "":
+    start_dt = _parse_datetime_for_duration(start_time)
+    end_dt = _parse_datetime_for_duration(end_time)
+    if start_dt is None or end_dt is None:
         return ""
     try:
-        if isinstance(start_time, str):
-            start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-        elif isinstance(start_time, datetime):
-            start_dt = start_time
-        else:
-            return ""
-        if isinstance(end_time, str):
-            end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-        elif isinstance(end_time, datetime):
-            end_dt = end_time
-        else:
-            return ""
         delta = end_dt - start_dt
         hours = delta.total_seconds() / 3600.0
         return f"{hours:.4f}"
     except (ValueError, TypeError):
         return ""
-
-
-def _seconds_to_hhmm(total_seconds: float) -> str:
-    """Convert seconds to hh:mm string format."""
-    total_seconds = max(0.0, total_seconds)
-    hours = int(total_seconds // 3600)
-    minutes = int((total_seconds % 3600) // 60)
-    return f"{hours:02d}:{minutes:02d}"
 
 
 def _format_timecop_csv(
@@ -219,21 +219,11 @@ def _format_simple_datetime(val: object, target_tz: str = "UTC") -> str:
 
 
 def _compute_simple_duration(start_time: object, end_time: object) -> tuple[str, str]:
-    if start_time is None or end_time is None:
+    start_dt = _parse_datetime_for_duration(start_time)
+    end_dt = _parse_datetime_for_duration(end_time)
+    if start_dt is None or end_dt is None:
         return "", ""
     try:
-        if isinstance(start_time, str):
-            start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-        elif isinstance(start_time, datetime):
-            start_dt = start_time
-        else:
-            return "", ""
-        if isinstance(end_time, str):
-            end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-        elif isinstance(end_time, datetime):
-            end_dt = end_time
-        else:
-            return "", ""
         delta = end_dt - start_dt
         total_secs = int(delta.total_seconds())
         hours = total_secs // 3600

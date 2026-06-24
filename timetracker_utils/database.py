@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class ActivityEntry(BaseModel):
         default_factory=list, description="List of category strings"
     )
     tags: list[str] = Field(default_factory=list, description="List of tag strings")
-    model_config = {"populate_by_name": True, "extra": "ignore"}
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
@@ -311,6 +311,66 @@ class Database:
         return False
 
     @staticmethod
+    def _process_incoming_row(
+        inc_row: pd.Series,
+        existing: pd.DataFrame,
+        new_rows: list[pd.DataFrame],
+        new_count: int,
+        skipped_count: int,
+        updated_count: int,
+    ) -> tuple[list[pd.DataFrame], int, int, int]:
+        """Process a single incoming row for merging.
+
+        Args:
+            inc_row: The incoming row to process.
+            existing: The existing DataFrame (with _merge_key column).
+            new_rows: List to collect new rows to add.
+            new_count: Current count of new rows.
+            skipped_count: Current count of skipped rows.
+            updated_count: Current count of updated rows.
+
+        Returns:
+            Tuple of (new_rows, new_count, skipped_count, updated_count).
+
+        """
+        inc_key = inc_row["_merge_key"]
+        match_mask = existing["_merge_key"] == inc_key
+        match_indices = existing.index[match_mask].tolist()
+        if not match_indices:
+            new_rows.append(
+                inc_row.to_frame().T.drop(columns=["_merge_key"])  # type: ignore[index]
+            )
+            new_count += 1
+            return new_rows, new_count, skipped_count, updated_count
+
+        resolved = False
+        for match_idx in match_indices:
+            old_row = existing.loc[match_idx]
+            if Database._rows_identical(old_row, inc_row, include_key=False):
+                skipped_count += 1
+                resolved = True
+                break
+            updated = False
+            for col in _MERGEABLE_COLUMNS:
+                new_val = inc_row.get(col)
+                if not _is_blank(new_val):
+                    existing.at[match_idx, col] = new_val
+                    updated = True
+            if updated:
+                updated_count += 1
+                resolved = True
+                break
+        if not resolved:
+            logger.warning(
+                "Unresolved merge for row with key %s - treating as new", inc_key
+            )
+            new_rows.append(
+                inc_row.to_frame().T.drop(columns=["_merge_key"])  # type: ignore[index]
+            )
+            new_count += 1
+        return new_rows, new_count, skipped_count, updated_count
+
+    @staticmethod
     def _merge_dataframes(
         existing: pd.DataFrame,
         incoming: pd.DataFrame,
@@ -339,41 +399,12 @@ class Database:
         skipped_count = 0
         updated_count = 0
 
-        for inc_idx, inc_row in incoming.iterrows():
-            inc_key = inc_row["_merge_key"]
-            match_mask = existing["_merge_key"] == inc_key
-            match_indices = existing.index[match_mask].tolist()
-            if not match_indices:
-                new_rows.append(
-                    incoming.iloc[[inc_idx]].drop(columns=["_merge_key"])  # type: ignore[index]
+        for _, inc_row in incoming.iterrows():
+            new_rows, new_count, skipped_count, updated_count = (
+                Database._process_incoming_row(
+                    inc_row, existing, new_rows, new_count, skipped_count, updated_count
                 )
-                new_count += 1
-                continue
-            resolved = False
-            for match_idx in match_indices:
-                old_row = existing.loc[match_idx]
-                if Database._rows_identical(old_row, inc_row, include_key=False):
-                    skipped_count += 1
-                    resolved = True
-                    break
-                updated = False
-                for col in _MERGEABLE_COLUMNS:
-                    new_val = inc_row.get(col)
-                    if not _is_blank(new_val):
-                        existing.at[match_idx, col] = new_val
-                        updated = True
-                if updated:
-                    updated_count += 1
-                    resolved = True
-                    break
-            if not resolved:
-                logger.warning(
-                    "Unresolved merge for row with key %s - treating as new", inc_key
-                )
-                new_rows.append(
-                    incoming.iloc[[inc_idx]].drop(columns=["_merge_key"])  # type: ignore[index]
-                )
-                new_count += 1
+            )
         result = existing.drop(columns=["_merge_key"])
         if new_rows:
             new_concat = pd.concat(new_rows, ignore_index=True)

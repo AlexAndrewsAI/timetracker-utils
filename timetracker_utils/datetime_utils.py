@@ -287,3 +287,11 @@ def aggregate_by_date(
         "category_breakdown": category_breakdown,
         "is_empty": False,
     }
+
+
+def _seconds_to_hhmm(total_seconds: float) -> str:
+    """Convert seconds to hh:mm string format."""
+    total_seconds = max(0.0, total_seconds)
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    return f"{hours:02d}:{minutes:02d}"

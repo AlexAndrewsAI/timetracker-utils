@@ -7,54 +7,15 @@ and interactive matplotlib bar charts with multi-page navigation.
 import logging
 import warnings
 from datetime import date as date_type
-from datetime import datetime
 from typing import Any
 
 import typer
 
-from timetracker_utils.csv_formatters import _seconds_to_hhmm
+from timetracker_utils.datetime_utils import _seconds_to_hhmm
 
 logger = logging.getLogger(__name__)
 
 _REPORT_TYPES = ["text", "bar"]
-
-
-def _parse_date_arg(date_str: str) -> date_type | tuple[date_type, date_type]:
-    """Parse a date string as either a single date or a date range.
-
-    Accepts:
-        - ``yyyy-mm-dd`` — single date
-        - ``yyyy-mm-dd:yyyy-mm-dd`` — date range (inclusive)
-
-    Returns:
-        A single ``date`` or a ``(start_date, end_date)`` tuple.
-
-    Raises:
-        ValueError: If the format is invalid or start > end.
-
-    """
-    parts = date_str.split(":")
-    if len(parts) == 1:
-        try:
-            return datetime.strptime(parts[0].strip(), "%Y-%m-%d").date()
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid date format: {parts[0]!r}. Use yyyy-mm-dd."
-            ) from exc
-    if len(parts) == 2:
-        try:
-            start = datetime.strptime(parts[0].strip(), "%Y-%m-%d").date()
-            end = datetime.strptime(parts[1].strip(), "%Y-%m-%d").date()
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid date range format: {date_str!r}. Use yyyy-mm-dd:yyyy-mm-dd."
-            ) from exc
-        if start > end:
-            raise ValueError(f"Start date {start} is after end date {end}.")
-        return start, end
-    raise ValueError(
-        f"Invalid date format: {date_str!r}. Use yyyy-mm-dd or yyyy-mm-dd:yyyy-mm-dd."
-    )
 
 
 def _print_daily_report(

@@ -969,7 +969,7 @@ def test_report_command_invalid_date(tmp_path: Path) -> None:
 
 def test_seconds_to_hhmm() -> None:
     """Test _seconds_to_hhmm helper."""
-    from timetracker_utils.cli import _seconds_to_hhmm
+    from timetracker_utils.datetime_utils import _seconds_to_hhmm
 
     assert _seconds_to_hhmm(0) == "00:00"
     assert _seconds_to_hhmm(3661) == "01:01"
@@ -1515,6 +1515,25 @@ def test_plot_pages_prev_next_callbacks() -> None:
     # Verify on_clicked was called to register the callbacks
     assert mock_button_inst.on_clicked.call_count >= 2
 
+    # Now test the button callbacks to cover lines 349-351
+    # We need to prevent the recursive _render calls
+    mock_plt.show = mock.MagicMock()  # Make show a no-op
+    call_count = [0]
+
+    def limited_close():
+        call_count[0] += 1
+        if call_count[0] > 10:  # Prevent infinite loop
+            raise RuntimeError("too many close calls")
+
+    mock_plt.close = mock.MagicMock(side_effect=limited_close)
+
+    for callback in button_callbacks:
+        mock_event = mock.MagicMock()
+        try:
+            callback(mock_event)
+        except RuntimeError:
+            pass
+
 
 def test_plot_pages_keyboard_navigation() -> None:
     """Test keyboard navigation callbacks in _plot_pages directly."""
@@ -1577,6 +1596,102 @@ def test_plot_pages_keyboard_navigation() -> None:
     mock_event_quit = mock.MagicMock()
     mock_event_quit.key = "q"
     key_cb(mock_event_quit)
+
+
+def test_plot_pages_keyboard_navigation_all_keys() -> None:
+    """Test all keyboard navigation keys in _plot_pages to cover missing lines."""
+    import unittest.mock as mock
+
+    mock_plt = mock.MagicMock()
+    mock_fig = mock.MagicMock()
+    mock_ax = mock.MagicMock()
+
+    mock_bar = mock.MagicMock()
+    mock_bar.get_width.return_value = 1.0
+    mock_bar.get_y.return_value = 0.0
+    mock_bar.get_height.return_value = 0.5
+    mock_ax.barh.return_value = [mock_bar]
+
+    mock_plt.subplots.return_value = (mock_fig, mock_ax)
+    mock_plt.close = mock.MagicMock()
+    mock_fig.text = mock.MagicMock()
+    mock_fig.add_axes = mock.MagicMock(return_value=mock.MagicMock())
+    mock_ax.set_xlabel = mock.MagicMock()
+    mock_ax.set_title = mock.MagicMock()
+
+    mock_button_inst = mock.MagicMock()
+    mock_button_inst.on_clicked = mock.MagicMock()
+    mock_button_cls = mock.MagicMock(return_value=mock_button_inst)
+
+    key_callbacks: list[Any] = []
+
+    def capture_key_callback(key: str, cb: Any) -> None:
+        if key == "key_press_event":
+            key_callbacks.append(cb)
+
+    mock_fig.canvas.mpl_connect = mock.MagicMock(side_effect=capture_key_callback)
+
+    # Stop after first show to capture key callbacks
+    show_call_count = [0]
+
+    def stop_after_first_show():
+        show_call_count[0] += 1
+        if show_call_count[0] == 1:
+            raise RuntimeError("stop after first")
+        return None
+
+    mock_plt.show = mock.MagicMock(side_effect=stop_after_first_show)
+
+    pages = [
+        {"title": "Page 1", "data": {"Activity A": 3600.0}},
+        {"title": "Page 2", "data": {"Activity B": 7200.0}},
+    ]
+
+    from timetracker_utils.report import _plot_pages
+
+    try:
+        _plot_pages(pages, 10800.0, "3:00", "UTC", mock_plt, mock_button_cls)
+    except RuntimeError:
+        pass
+
+    # Verify key callback was registered
+    assert len(key_callbacks) >= 1
+    key_cb = key_callbacks[0]
+
+    # Test quit key
+    mock_event_quit = mock.MagicMock()
+    mock_event_quit.key = "q"
+    key_cb(mock_event_quit)
+
+    # Test escape key
+    mock_event_escape = mock.MagicMock()
+    mock_event_escape.key = "escape"
+    key_cb(mock_event_escape)
+
+    # Test right arrow (next page)
+    mock_event_right = mock.MagicMock()
+    mock_event_right.key = "right"
+    key_cb(mock_event_right)
+
+    # Test 'n' key (next page)
+    mock_event_n = mock.MagicMock()
+    mock_event_n.key = "n"
+    key_cb(mock_event_n)
+
+    # Test left arrow (prev page)
+    mock_event_left = mock.MagicMock()
+    mock_event_left.key = "left"
+    key_cb(mock_event_left)
+
+    # Test 'p' key (prev page)
+    mock_event_p = mock.MagicMock()
+    mock_event_p.key = "p"
+    key_cb(mock_event_p)
+
+    # Test backspace (prev page)
+    mock_event_backspace = mock.MagicMock()
+    mock_event_backspace.key = "backspace"
+    key_cb(mock_event_backspace)
 
 
 def test_import_matplotlib_backend_all_fail(monkeypatch: pytest.MonkeyPatch) -> None:

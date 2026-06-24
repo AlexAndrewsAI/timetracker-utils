@@ -4,7 +4,9 @@ Provides a typer-based CLI for the package.
 """
 
 import logging
+from collections.abc import Callable
 from datetime import date as date_type
+from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -13,17 +15,20 @@ import pandas as pd
 import typer
 
 from timetracker_utils import __version__
+from timetracker_utils.base_tracker import BaseTimeTracker
 from timetracker_utils.config import load_config
 from timetracker_utils.csv_formatters import (
     _format_simple_csv,
     _format_timecop_csv,
-    _seconds_to_hhmm,
 )
 from timetracker_utils.database import Database
-from timetracker_utils.datetime_utils import aggregate_by_date, convert_column_tz
+from timetracker_utils.datetime_utils import (
+    _seconds_to_hhmm,
+    aggregate_by_date,
+    convert_column_tz,
+)
 from timetracker_utils.report import (
     _REPORT_TYPES,
-    _parse_date_arg,
     _print_breakdown,
     _print_daily_report,
     _show_bar_range,
@@ -45,6 +50,44 @@ def version_callback(value: bool) -> None:
     return None
 
 
+def _parse_date_arg(date_str: str) -> date_type | tuple[date_type, date_type]:
+    """Parse a date string as either a single date or a date range.
+
+    Accepts:
+        - ``yyyy-mm-dd`` — single date
+        - ``yyyy-mm-dd:yyyy-mm-dd`` — date range (inclusive)
+
+    Returns:
+        A single ``date`` or a ``(start_date, end_date)`` tuple.
+
+    Raises:
+        ValueError: If the format is invalid or start > end.
+
+    """
+    parts = date_str.split(":")
+    if len(parts) == 1:
+        try:
+            return datetime.strptime(parts[0].strip(), "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid date format: {parts[0]!r}. Use yyyy-mm-dd."
+            ) from exc
+    if len(parts) == 2:
+        try:
+            start = datetime.strptime(parts[0].strip(), "%Y-%m-%d").date()
+            end = datetime.strptime(parts[1].strip(), "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid date range format: {date_str!r}. Use yyyy-mm-dd:yyyy-mm-dd."
+            ) from exc
+        if start > end:
+            raise ValueError(f"Start date {start} is after end date {end}.")
+        return start, end
+    raise ValueError(
+        f"Invalid date format: {date_str!r}. Use yyyy-mm-dd or yyyy-mm-dd:yyyy-mm-dd."
+    )
+
+
 @app.callback()
 def main(
     _version: bool | None = typer.Option(
@@ -57,8 +100,6 @@ def main(
     ),
 ) -> None:
     """Time tracker utilities CLI."""
-    _ = TimeCop
-    _ = SimpleTimeTracker
 
 
 @app.command()
@@ -76,35 +117,28 @@ def add(
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(config)
 
-    if format == "timecop":
-        try:
-            cop = TimeCop(default_timezone=cfg.timezone)
-            cop.read_csv(input_file)
-        except ValueError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1) from exc
-        db = Database()
-        db.write(
-            cop.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
-        )
-        typer.echo(f"Loaded DataFrame ({len(cop.entries)} rows total):")
-        display_df = cop.entries.copy()
-    elif format == "stt":
-        try:
-            tracker = SimpleTimeTracker(default_timezone=cfg.timezone)
-            tracker.read_csv(input_file)
-        except ValueError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1) from exc
-        db = Database()
-        db.write(
-            tracker.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
-        )
-        typer.echo(f"Loaded DataFrame ({len(tracker.entries)} rows total):")
-        display_df = tracker.entries.copy()
-    else:
+    tracker_classes: dict[str, type[BaseTimeTracker]] = {
+        "timecop": TimeCop,
+        "stt": SimpleTimeTracker,
+    }
+
+    if format not in tracker_classes:
         typer.echo(f"Unknown format: {format}. Use 'timecop' or 'stt'.", err=True)
         raise typer.Exit(code=1)
+
+    try:
+        tracker = tracker_classes[format](default_timezone=cfg.timezone)
+        tracker.read_csv(input_file)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    db = Database()
+    db.write(
+        tracker.entries, cfg.database, max_conflict_display=cfg.max_conflict_display
+    )
+    typer.echo(f"Loaded DataFrame ({len(tracker.entries)} rows total):")
+    display_df = tracker.entries.copy()
 
     if not display_df.empty:
         if "start_time" in display_df.columns:
@@ -148,13 +182,16 @@ def export(
     else:
         typer.echo(f"Exporting {len(db_entries)} entries to {output_file}")
 
-    if format == "timecop":
-        _format_timecop_csv(db_entries, output_file, cfg.timezone)
-    elif format == "stt":
-        _format_simple_csv(db_entries, output_file, cfg.timezone)
-    else:
+    format_functions: dict[str, Callable[[pd.DataFrame, Path, str], None]] = {
+        "timecop": _format_timecop_csv,
+        "stt": _format_simple_csv,
+    }
+
+    if format not in format_functions:
         typer.echo(f"Unknown format: {format}. Use 'timecop' or 'stt'.", err=True)
         raise typer.Exit(code=1)
+
+    format_functions[format](db_entries, output_file, cfg.timezone)
 
 
 @app.command()

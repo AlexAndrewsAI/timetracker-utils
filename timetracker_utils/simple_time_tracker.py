@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, cast
 
 import pandas as pd
-from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from timetracker_utils.base_tracker import BaseTimeEntry, BaseTimeTracker
 
@@ -44,10 +44,7 @@ class SimpleTimeEntry(BaseTimeEntry):
         description="Duration in minutes (validation cross-check only)",
     )
 
-    model_config = {  # noqa: RUF012
-        "populate_by_name": True,
-        "extra": "ignore",
-    }
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     @field_validator("duration_minutes", mode="before")
     @classmethod
