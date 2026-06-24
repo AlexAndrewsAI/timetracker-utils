@@ -6,8 +6,7 @@ Provides a typer-based CLI for the package.
 import logging
 from collections.abc import Callable
 from datetime import date as date_type
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 

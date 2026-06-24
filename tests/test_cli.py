@@ -55,7 +55,7 @@ def test_cli_no_args_exits_with_error() -> None:
 
 
 def test_cli_callback_run_directly() -> None:
-    """Test the main callback body directly to cover _ = TimeCop."""
+    """Test the main callback body directly to cover import coverage."""
     # main() is a Typer callback that expects options through Typer's context,
     # so we invoke it via the app with --help to reach the callback body
     result = runner.invoke(app, ["--help"])
@@ -63,10 +63,10 @@ def test_cli_callback_run_directly() -> None:
 
 
 def test_cli_main_body() -> None:
-    """Test the main callback body covers _ = TimeCop line."""
+    """Test the main callback body covers imports."""
     from timetracker_utils.cli import main
 
-    # main() with no arguments runs the callback body (hits _ = TimeCop line)
+    # main() with no arguments runs the callback body (ensures imports are loaded)
     main()
 
 
@@ -1265,7 +1265,7 @@ def test_report_type_bar_range(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     mock_plt.show.assert_called()
 
 
-def _make_mock_plt():
+def _make_mock_plt() -> Any:
     """Create mock matplotlib objects for testing bar charts."""
     import unittest.mock as mock
 
@@ -1445,7 +1445,7 @@ def test_plot_pages_button_callbacks() -> None:
     # Stop after showing to prevent infinite loop
     show_call_count = [0]
 
-    def mock_show():
+    def mock_show() -> None:
         show_call_count[0] += 1
         if show_call_count[0] >= 2:
             raise RuntimeError("stop")
@@ -1520,7 +1520,7 @@ def test_plot_pages_prev_next_callbacks() -> None:
     mock_plt.show = mock.MagicMock()  # Make show a no-op
     call_count = [0]
 
-    def limited_close():
+    def limited_close() -> None:
         call_count[0] += 1
         if call_count[0] > 10:  # Prevent infinite loop
             raise RuntimeError("too many close calls")
@@ -1571,7 +1571,7 @@ def test_plot_pages_keyboard_navigation() -> None:
     # Stop after first show to capture key callbacks
     show_call_count = [0]
 
-    def stop_after_first_show():
+    def stop_after_first_show() -> None:
         show_call_count[0] += 1
         if show_call_count[0] == 1:
             raise RuntimeError("stop after first")
@@ -1634,7 +1634,7 @@ def test_plot_pages_keyboard_navigation_all_keys() -> None:
     # Stop after first show to capture key callbacks
     show_call_count = [0]
 
-    def stop_after_first_show():
+    def stop_after_first_show() -> None:
         show_call_count[0] += 1
         if show_call_count[0] == 1:
             raise RuntimeError("stop after first")
