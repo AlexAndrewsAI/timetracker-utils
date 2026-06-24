@@ -2,6 +2,7 @@
 
 # ruff: noqa: E501 - CSV data lines exceed line length limit
 
+import contextlib
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -1432,7 +1433,7 @@ def test_plot_pages_button_callbacks() -> None:
     mock_button_inst.on_clicked = mock.MagicMock(side_effect=capture_callback)
     mock_button_cls = mock.MagicMock(return_value=mock_button_inst)
     mock_fig.canvas.mpl_connect = mock.MagicMock(
-        side_effect=lambda k, cb: callbacks_list.append(cb)
+        side_effect=lambda _k, cb: callbacks_list.append(cb)
     )
 
     pages = [
@@ -1453,10 +1454,8 @@ def test_plot_pages_button_callbacks() -> None:
 
     mock_plt.show = mock.MagicMock(side_effect=mock_show)
 
-    try:
+    with contextlib.suppress(RuntimeError):
         _plot_pages(pages, 10800.0, "3:00", "UTC", mock_plt, mock_button_cls)
-    except RuntimeError:
-        pass
 
     mock_plt.show.assert_called()
     mock_button_inst.on_clicked.assert_called()
@@ -1505,10 +1504,8 @@ def test_plot_pages_prev_next_callbacks() -> None:
     # Mock plt.show to raise exception to prevent infinite loop
     mock_plt.show = mock.MagicMock(side_effect=RuntimeError("stop"))
 
-    try:
+    with contextlib.suppress(RuntimeError):
         _plot_pages(pages, 10800.0, "3:00", "UTC", mock_plt, mock_button_cls)
-    except RuntimeError:
-        pass
 
     # Verify callbacks were registered
     assert len(button_callbacks) >= 2
@@ -1529,10 +1526,8 @@ def test_plot_pages_prev_next_callbacks() -> None:
 
     for callback in button_callbacks:
         mock_event = mock.MagicMock()
-        try:
+        with contextlib.suppress(RuntimeError):
             callback(mock_event)
-        except RuntimeError:
-            pass
 
 
 def test_plot_pages_keyboard_navigation() -> None:
@@ -1585,10 +1580,8 @@ def test_plot_pages_keyboard_navigation() -> None:
 
     from timetracker_utils.report import _plot_pages
 
-    try:
+    with contextlib.suppress(RuntimeError):
         _plot_pages(pages, 3600.0, "1:00", "UTC", mock_plt, mock_button_cls)
-    except RuntimeError:
-        pass
 
     # Verify key callback was registered and test quit path
     assert len(key_callbacks) >= 1
@@ -1649,10 +1642,8 @@ def test_plot_pages_keyboard_navigation_all_keys() -> None:
 
     from timetracker_utils.report import _plot_pages
 
-    try:
+    with contextlib.suppress(RuntimeError):
         _plot_pages(pages, 10800.0, "3:00", "UTC", mock_plt, mock_button_cls)
-    except RuntimeError:
-        pass
 
     # Verify key callback was registered
     assert len(key_callbacks) >= 1
@@ -1709,7 +1700,7 @@ def test_import_matplotlib_backend_all_fail(monkeypatch: pytest.MonkeyPatch) -> 
     mock_widget_module = mock.MagicMock()
     mock_widget_module.Button = mock_button_cls
 
-    def mock_import_module(name: str, *args: Any, **kwargs: Any) -> Any:
+    def mock_import_module(name: str, *_args: Any, **_kwargs: Any) -> Any:
         if name == "matplotlib":
             return mock_mpl
         if name == "matplotlib.pyplot":
@@ -1731,7 +1722,7 @@ def test_import_matplotlib_backend_all_fail(monkeypatch: pytest.MonkeyPatch) -> 
     ):
         from timetracker_utils.report import _import_matplotlib
 
-        plt, Button = _import_matplotlib()
+        _plt, _Button = _import_matplotlib()
         # All backends should have been tried and failed, so use() was never called
         assert not mock_mpl.use.called
 
@@ -1753,7 +1744,7 @@ def test_import_matplotlib_backend_success(monkeypatch: pytest.MonkeyPatch) -> N
 
     backend_success_called = [False]
 
-    def mock_import_module(name: str, *args: Any, **kwargs: Any) -> Any:
+    def mock_import_module(name: str, *_args: Any, **_kwargs: Any) -> Any:
         if "backend_tkagg" in name:
             backend_success_called[0] = True
             return mock_mpl
@@ -1778,7 +1769,7 @@ def test_import_matplotlib_backend_success(monkeypatch: pytest.MonkeyPatch) -> N
     ):
         from timetracker_utils.report import _import_matplotlib
 
-        plt, Button = _import_matplotlib()
+        _plt, _Button = _import_matplotlib()
         # Backend should have been successfully imported
         assert backend_success_called[0]
         assert mock_mpl.use.called
