@@ -25,11 +25,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run tests
-        run: uv run pytest
+      - name: Run tests with coverage
+        run: uv run pytest --cov=timetracker_utils --cov-report=term-missing --cov-report=xml
 
       - name: Lint with ruff
         run: uv run ruff check .
 
       - name: Type check with mypy
         run: uv run mypy .
+
+      - name: Security audit with pip-audit
+        run: uv run pip-audit

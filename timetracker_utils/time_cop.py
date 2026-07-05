@@ -12,7 +12,7 @@ import logging
 from typing import ClassVar, cast
 
 import pandas as pd
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from timetracker_utils.base_tracker import BaseTimeEntry, BaseTimeTracker
 
@@ -38,10 +38,7 @@ class TimeEntry(BaseTimeEntry):
         description="Pre-computed combined column; ignored at runtime",
     )
 
-    model_config = {  # noqa: RUF012
-        "populate_by_name": True,
-        "extra": "ignore",
-    }
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
 class TimeCop(BaseTimeTracker):

@@ -16,16 +16,11 @@ import pandas as pd
 from pydantic import (
     AliasChoices,
     BaseModel,
+    ConfigDict,
     Field,
     ValidationInfo,
     field_validator,
     model_validator,
-)
-
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    message=r"Field name \".*\" shadows an attribute.*",
 )
 
 logger = logging.getLogger(__name__)
@@ -74,7 +69,7 @@ class BaseTimeEntry(BaseModel):
         description="Optional list of tag strings",
         validation_alias=AliasChoices("tags", "record tags"),
     )
-    model_config = {"populate_by_name": True, "extra": "ignore"}
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     # -- validators (declaration order matters for model_validator) --
 
@@ -288,12 +283,18 @@ class BaseTimeTracker:
                     "Extra columns in CSV that will be ignored: %s",
                     sorted(extra_cols),
                 )
-        validated_entries = [
-            self._ENTRY_CLASS.model_validate(
-                row, context={"default_timezone": self.default_timezone}
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=UserWarning,
+                message=r"Field name \".*\" shadows an attribute.*",
             )
-            for row in reader
-        ]
+            validated_entries = [
+                self._ENTRY_CLASS.model_validate(
+                    row, context={"default_timezone": self.default_timezone}
+                )
+                for row in reader
+            ]
         if validated_entries:
             self.entries = pd.DataFrame(
                 [entry.model_dump() for entry in validated_entries]

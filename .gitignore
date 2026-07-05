@@ -6,48 +6,19 @@ temp.*
 *.lock
 !uv.lock
 
-# AI IDEs & Editors
-.aider/
-.aider.chat.history.md
-.blackbox/
-.cline/
-.cline_docs/
-.codium/
-.codeium/
-.continue/
-.copilot/
-.cursor/
-.cursor-server/
-.devin/
-.lm-studio/
-.lovable/
-.phind/
-.supermaven/
-.tabnine/
-.v0/
-.windsurf/
-
-# AI Agent Frameworks & CLI Tools
-.antigravity
-.autogpt
-.gpt-engineer/
-
-# AI Model Runners
-.ollama/
+/.*
+!.gitignore
+!.github
+!.devin
+!.env.example
 
 # AI Agent Outputs & State Files
-.agent_state/
-.agentic/
 agent_artifacts/
 agent_logs/
 agent_output/
 agent_memory/
 
 # AI Tool Cache & Config
-.ai_cache/
-.ai_tmp/
-.llm/
-.llm_cache/
 conversation_history/
 
 # Local Model Files
@@ -118,11 +89,6 @@ dmypy.json
 *.swp
 *.swo
 *~
-.DS_Store
-.emacs.desktop
-.idea/
-.vim/
-.vscode/
 
 # Merge Conflicts
 *.orig
@@ -131,14 +97,12 @@ dmypy.json
 # OS
 Thumbs.db
 
-# Secrets & Configuration
-.env
-.env.local
-.env.*.local
-
 # Project Specific
 *.db
 *.log
 *.sqlite
 *.sqlite3
 debug.log
+.env
+.env.local
+.env.*.local
