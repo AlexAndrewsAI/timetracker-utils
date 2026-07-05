@@ -1,4 +1,4 @@
-# Agent Instructions: python-package-template
+# Agent Instructions: timetracker-utils
 
 ## Quick Start
 1. **Setup:** Run `uv sync --dev` before major work sessions
@@ -14,13 +14,20 @@
 | Testing | pytest |
 | Linting & Formatting | ruff |
 | Type Checking | mypy |
+| Security Audit | pip-audit |
 
 ## Project Structure
 ```
-python_package_template/
-  ├── config.py          (Pydantic models)
-  ├── hello.py           (Business logic)
-  └── cli.py             (Typer CLI)
+timetracker-utils/
+  ├── timetracker_utils/
+  │   ├── cli.py              (Typer CLI interface)
+  │   ├── config.py           (Pydantic config model)
+  │   ├── database.py         (SQLite persistence)
+  │   ├── datetime_utils.py   (Timezone conversion)
+  │   ├── report.py           (Report generation)
+  │   ├── time_cop.py         (TimeCop CSV parsing)
+  │   ├── simple_time_tracker.py (Simple Time Tracker parsing)
+  │   └── base_tracker.py     (Base tracker class)
 tests/                   (Pytest suite)
 pyproject.toml           (Dependencies & tool config)
 ```
@@ -28,7 +35,7 @@ pyproject.toml           (Dependencies & tool config)
 ## Essential Directives
 
 ### Code Standards
-- **Type Hints:** Required on ALL function signatures and class members. Enforce strictly with mypy.
+- **Type Hints:** Required on ALL function signatures and class members. Enforce strictly with mypy. Avoid using `# type: ignore` comments to suppress mypy errors; fix the underlying type issues instead.
 - **Docstrings:** Google-style format for all public APIs.
 - **Logging:** Use `logging` module only; never `print()`.
 - **Relative Paths:** Never use absolute paths in code.
@@ -40,7 +47,7 @@ pyproject.toml           (Dependencies & tool config)
 
 ### Testing & Quality
 - **Test Coverage:** Every code change requires corresponding tests in `tests/`.
-- **Validation Before Commit:** Run the full suite: `uv run pytest`, `uv run ruff check .`, `uv run mypy .`.
+- **Validation Before Commit:** Run the full suite: `uv run pytest`, `uv run ruff check .`, `uv run mypy .`, `uv run pip-audit`.
 
 ### Operational Constraints
 - **No Interactive Prompts:** Mock or bypass any interactive commands.
@@ -57,5 +64,6 @@ uv run pytest                           # Run tests
 uv run ruff check .                     # Lint
 uv run ruff format .                    # Auto-format
 uv run mypy .                           # Type check
-uv run hello-world hello  # Test CLI
+uv run pip-audit                        # Security audit
+uv run timetracker --version            # Test CLI
 ```

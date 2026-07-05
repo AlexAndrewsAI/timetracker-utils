@@ -17,6 +17,7 @@ This package processes CSV time tracking exports (in the TimeCop format), valida
   3. **Conflict detection**: Non-blank conflicting values raise a `MergeConflictError`
 - **Timezone conversion**: Display timestamps in any IANA or abbreviation timezone (ET, PT, UTC, etc.)
 - **Round-trip CSV export**: Export the entire database back to TimeCop-format CSV
+- **Daily reports**: Generate text or interactive bar chart reports for single dates or date ranges, with breakdowns by activity, tags, and categories
 - **CLI interface**: Full-featured command-line interface via Typer
 
 ## Installation
@@ -72,7 +73,31 @@ uv run timetracker export --config tests/timetracker.yml --format timecop timeco
 
 # Export the database back to Simple Time Tracker CSV
 uv run timetracker export --config tests/timetracker.yml --format stt stt_export.csv
+
+# Generate a daily report for a specific date
+uv run timetracker report --config tests/timetracker.yml --date 2026-04-13
+
+# Generate a report for a date range
+uv run timetracker report --config tests/timetracker.yml --date 2026-04-13:2026-04-15
+
+# Generate an interactive bar chart report (requires matplotlib and display)
+uv run timetracker report --config tests/timetracker.yml --date 2026-04-13 --type bar
 ```
+
+#### Report Command Options
+
+The `report` command generates daily or range reports with breakdowns by activity, tags, and categories:
+
+- **Date format**: Use `yyyy-mm-dd` for single dates or `yyyy-mm-dd:yyyy-mm-dd` for inclusive date ranges
+- **Output types**:
+  - `text` (default): Displays formatted tables with time and percentage breakdowns
+  - `bar`: Interactive matplotlib bar charts with navigation (requires display server)
+- **Breakdowns**: Reports show total time with breakdowns for:
+  - Activities (project/task names)
+  - Tags (user-defined labels)
+  - Categories (groupings)
+
+**Note**: Bar chart reports require matplotlib and a display server (`$DISPLAY` or `$WAYLAND_DISPLAY`). Use `--type text` for terminal-only environments.
 
 ### Python API
 
@@ -165,6 +190,9 @@ uv run ruff format .
 
 # Type check
 uv run mypy .
+
+# Security audit
+uv run pip-audit
 ```
 
 ## Technology Stack
@@ -179,10 +207,32 @@ uv run mypy .
 | Testing           | pytest        |
 | Linting           | ruff          |
 | Type Checking     | mypy          |
+| Security Audit    | pip-audit     |
 
 ## License
 
 MIT
+
+## Agent Instructions
+
+This project includes AGENTS.md with instructions for AI agents working on this codebase. The instructions enforce:
+
+- **Code Standards**: Type hints on all functions, Google-style docstrings, logging over print()
+- **Quality Validation**: Automated pytest, ruff, mypy, and pip-audit checks before commits
+- **Development Workflow**: uv for dependency management, proper testing patterns
+- **Project Structure**: Consistent organization with separation of concerns
+
+## Python Best Practices Used
+
+- ✅ **Type hints**: All functions and classes use type annotations
+- ✅ **Docstrings**: Clear descriptions of modules, classes, and functions
+- ✅ **Project structure**: Proper package layout with separation of concerns
+- ✅ **Testing**: Comprehensive test coverage with pytest
+- ✅ **Configuration**: Externalized config using pydantic BaseModel
+- ✅ **Linting**: Code quality checks with ruff
+- ✅ **Dependency management**: Explicit dependencies in pyproject.toml
+- ✅ **Security**: Automated vulnerability scanning with pip-audit
+- ✅ **Python versions**: Supports Python 3.10+
 
 ## Author
 
